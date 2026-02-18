@@ -4,34 +4,80 @@ import { types as MsTypes } from "mediasoup-client";
 import { Socket } from "socket.io-client";
 import { useStore } from "../store/useStore";
 
-const SPEAKING_THRESHOLD = 15; // RMS threshold 0-255
+/**
+ * Threshold for local speaking detection using time-domain RMS.
+ * Time-domain values for silence are ~128; any speech deviates from that.
+ * A value of 8 corresponds to roughly 6% of full-scale amplitude — sensitive
+ * enough to catch whispers but above mic self-noise on most hardware.
+ */
+const LOCAL_SPEAKING_THRESHOLD = 8;
+/**
+ * Threshold for remote speaking detection using frequency-domain average.
+ * Remote WebRTC audio has consistent magnitude levels so frequency-domain
+ * works well here.
+ */
+const REMOTE_SPEAKING_THRESHOLD = 15;
 const SPEAKING_POLL_MS = 80;
 
 function startSpeakingDetection(
   stream: MediaStream,
   onSpeaking: (speaking: boolean) => void,
 ): () => void {
+  // Clone the stream so mediasoup's use of the original track cannot affect
+  // our analyser node.
+  const analyserStream = stream.clone();
   const ctx = new AudioContext();
-  const source = ctx.createMediaStreamSource(stream);
+  const source = ctx.createMediaStreamSource(analyserStream);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
-  analyser.smoothingTimeConstant = 0.3;
+  analyser.smoothingTimeConstant = 0.1;
   source.connect(analyser);
-  const buf = new Uint8Array(analyser.frequencyBinCount);
+  // Time-domain buffer is fftSize (not frequencyBinCount)
+  const buf = new Uint8Array(analyser.fftSize);
   let speaking = false;
-  const interval = setInterval(() => {
-    analyser.getByteFrequencyData(buf);
-    const rms = buf.reduce((a, b) => a + b, 0) / buf.length;
-    const nowSpeaking = rms > SPEAKING_THRESHOLD;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const poll = () => {
+    if (stopped) return;
+    if (ctx.state === "suspended") {
+      // Context got suspended — resume then retry
+      ctx
+        .resume()
+        .then(() => {
+          timer = setTimeout(poll, SPEAKING_POLL_MS);
+        })
+        .catch(() => {
+          timer = setTimeout(poll, 200);
+        });
+      return;
+    }
+    // Use time-domain data for local mic: silence = all 128, speech deviates
+    analyser.getByteTimeDomainData(buf);
+    let squareSum = 0;
+    for (let i = 0; i < buf.length; i++) {
+      const deviation = buf[i] - 128;
+      squareSum += deviation * deviation;
+    }
+    const rms = Math.sqrt(squareSum / buf.length);
+    const nowSpeaking = rms > LOCAL_SPEAKING_THRESHOLD;
     if (nowSpeaking !== speaking) {
       speaking = nowSpeaking;
       onSpeaking(speaking);
     }
-  }, SPEAKING_POLL_MS);
+    timer = setTimeout(poll, SPEAKING_POLL_MS);
+  };
+
+  // Wait for the context to fully resume before starting the poll
+  ctx.resume().then(poll).catch(poll);
+
   return () => {
-    clearInterval(interval);
+    stopped = true;
+    if (timer !== null) clearTimeout(timer);
     source.disconnect();
     ctx.close();
+    // Stop cloned tracks so they don't linger
+    analyserStream.getTracks().forEach((t) => t.stop());
   };
 }
 
@@ -48,17 +94,37 @@ function startRemoteSpeakingDetection(
   source.connect(analyser);
   const buf = new Uint8Array(analyser.frequencyBinCount);
   let speaking = false;
-  const interval = setInterval(() => {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const poll = () => {
+    if (stopped) return;
+    if (ctx.state === "suspended") {
+      ctx
+        .resume()
+        .then(() => {
+          timer = setTimeout(poll, SPEAKING_POLL_MS);
+        })
+        .catch(() => {
+          timer = setTimeout(poll, 200);
+        });
+      return;
+    }
     analyser.getByteFrequencyData(buf);
     const rms = buf.reduce((a, b) => a + b, 0) / buf.length;
-    const nowSpeaking = rms > SPEAKING_THRESHOLD;
+    const nowSpeaking = rms > REMOTE_SPEAKING_THRESHOLD;
     if (nowSpeaking !== speaking) {
       speaking = nowSpeaking;
       onSpeaking(speaking);
     }
-  }, SPEAKING_POLL_MS);
+    timer = setTimeout(poll, SPEAKING_POLL_MS);
+  };
+
+  ctx.resume().then(poll).catch(poll);
+
   return () => {
-    clearInterval(interval);
+    stopped = true;
+    if (timer !== null) clearTimeout(timer);
     source.disconnect();
     ctx.close();
   };
@@ -82,6 +148,10 @@ export function useVoice() {
     localMuted,
     setLocalMuted,
     setLocalSpeaking,
+    audioBitrateKbps,
+    setAudioBitrateKbps,
+    audioInputDeviceId,
+    audioOutputDeviceId,
   } = useStore();
 
   const joinVoice = useCallback(
@@ -89,19 +159,41 @@ export function useVoice() {
       if (!socket) return;
       channelIdRef.current = channelId;
 
-      // Load mediasoup device
-      const routerRtpCapabilities = await new Promise<MsTypes.RtpCapabilities>(
-        (resolve) => socket.emit("voice:getRouterCapabilities", resolve),
+      // Resolve the local user's display name from the store
+      const storeState = useStore.getState();
+      const activeServer = storeState.activeServer;
+      const session = activeServer
+        ? storeState.sessions[activeServer.id]
+        : null;
+      const username = session?.user.display_name ?? "Unknown";
+      const userId = session?.user.id ?? "";
+
+      // 1. Join — server returns router RTP capabilities + already-producing peers
+      const joinResult = await new Promise<{
+        rtpCapabilities: MsTypes.RtpCapabilities;
+        peers: { peerId: string; userId: string; username: string }[];
+      }>((resolve) =>
+        socket.emit("voice:join", { channelId, username, userId }, resolve),
       );
 
+      if (!joinResult?.rtpCapabilities) {
+        console.error("voice:join failed", joinResult);
+        return;
+      }
+
+      // 2. Load mediasoup Device
       const device = new Device();
-      await device.load({ routerRtpCapabilities });
+      await device.load({ routerRtpCapabilities: joinResult.rtpCapabilities });
       deviceRef.current = device;
 
-      // Create send transport
+      // 3. Create send transport
       const sendParams = await new Promise<MsTypes.TransportOptions>(
         (resolve) =>
-          socket.emit("voice:createTransport", { direction: "send" }, resolve),
+          socket.emit(
+            "voice:createTransport",
+            { channelId, direction: "send" },
+            resolve,
+          ),
       );
       const sendTransport = device.createSendTransport(sendParams);
       sendTransportRef.current = sendTransport;
@@ -109,22 +201,32 @@ export function useVoice() {
       sendTransport.on("connect", ({ dtlsParameters }, cb) => {
         socket.emit(
           "voice:connectTransport",
-          { transportId: sendTransport.id, dtlsParameters },
+          { channelId, transportId: sendTransport.id, dtlsParameters },
           cb,
         );
       });
       sendTransport.on("produce", ({ kind, rtpParameters, appData }, cb) => {
         socket.emit(
           "voice:produce",
-          { transportId: sendTransport.id, kind, rtpParameters, appData },
+          {
+            channelId,
+            transportId: sendTransport.id,
+            kind,
+            rtpParameters,
+            appData,
+          },
           cb,
         );
       });
 
-      // Create recv transport
+      // 4. Create recv transport
       const recvParams = await new Promise<MsTypes.TransportOptions>(
         (resolve) =>
-          socket.emit("voice:createTransport", { direction: "recv" }, resolve),
+          socket.emit(
+            "voice:createTransport",
+            { channelId, direction: "recv" },
+            resolve,
+          ),
       );
       const recvTransport = device.createRecvTransport(recvParams);
       recvTransportRef.current = recvTransport;
@@ -132,37 +234,49 @@ export function useVoice() {
       recvTransport.on("connect", ({ dtlsParameters }, cb) => {
         socket.emit(
           "voice:connectTransport",
-          { transportId: recvTransport.id, dtlsParameters },
+          { channelId, transportId: recvTransport.id, dtlsParameters },
           cb,
         );
       });
 
-      // Get mic stream and produce
+      // 5. Get mic and produce (this triggers voice:newPeer on the server side
+      //    so existing peers learn about us only once we are actually sending)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: audioInputDeviceId
+            ? { deviceId: { exact: audioInputDeviceId } }
+            : true,
         });
         const track = stream.getAudioTracks()[0];
-        const producer = await sendTransport.produce({ track });
+        const producer = await sendTransport.produce({
+          track,
+          encodings: [{ maxBitrate: audioBitrateKbps * 1000 }],
+          codecOptions: { opusStereo: false, opusDtx: true },
+        });
         producerRef.current = producer;
 
         // Start local speaking detection
         localSpeakingCleanupRef.current?.();
         localSpeakingCleanupRef.current = startSpeakingDetection(
           stream,
-          setLocalSpeaking,
+          (speaking) => {
+            setLocalSpeaking(speaking);
+            socket.emit("voice:speaking", { channelId, speaking });
+          },
         );
       } catch (err) {
         console.error("Mic access denied", err);
       }
 
-      // Join channel and consume existing peers
-      const peers = await new Promise<
-        { peerId: string; userId: string; username: string }[]
-      >((resolve) => socket.emit("voice:join", { channelId }, resolve));
-
-      for (const peer of peers) {
-        await consumePeer(socket, device, recvTransport, peer.peerId);
+      // 6. Consume peers that were already producing when we joined
+      for (const peer of joinResult.peers) {
+        await consumePeer(
+          socket,
+          device,
+          recvTransport,
+          peer.peerId,
+          channelId,
+        );
         addVoicePeer({
           id: peer.peerId,
           userId: peer.userId,
@@ -172,11 +286,17 @@ export function useVoice() {
         });
       }
 
-      // Listen for new peers
+      // 7. Listen for peers that start producing after we joined
       socket.on(
         "voice:newPeer",
         async (peer: { peerId: string; userId: string; username: string }) => {
-          await consumePeer(socket, device, recvTransport, peer.peerId);
+          await consumePeer(
+            socket,
+            device,
+            recvTransport,
+            peer.peerId,
+            channelId,
+          );
           addVoicePeer({
             id: peer.peerId,
             userId: peer.userId,
@@ -195,7 +315,15 @@ export function useVoice() {
         removeVoicePeer(peerId);
       });
     },
-    [addVoicePeer, removeVoicePeer, updateVoicePeer, setLocalSpeaking],
+    [
+      addVoicePeer,
+      removeVoicePeer,
+      updateVoicePeer,
+      setLocalSpeaking,
+      audioBitrateKbps,
+      audioInputDeviceId,
+      audioOutputDeviceId,
+    ],
   );
 
   const consumePeer = async (
@@ -203,19 +331,29 @@ export function useVoice() {
     device: MsTypes.Device,
     recvTransport: MsTypes.Transport,
     peerId: string,
+    channelId: string,
   ) => {
     const params = await new Promise<MsTypes.ConsumerOptions>((resolve) =>
       socket.emit(
         "voice:consume",
-        { peerId, rtpCapabilities: device.rtpCapabilities },
+        { channelId, peerId, rtpCapabilities: device.rtpCapabilities },
         resolve,
       ),
     );
-    if (!params.id) return;
+    if (!params?.id) {
+      console.warn("voice:consume returned no id for peer", peerId, params);
+      return;
+    }
     const consumer = await recvTransport.consume(params);
     consumersRef.current.set(peerId, consumer);
     const audioEl = new Audio();
     audioEl.srcObject = new MediaStream([consumer.track]);
+    if (
+      audioOutputDeviceId &&
+      typeof (audioEl as any).setSinkId === "function"
+    ) {
+      (audioEl as any).setSinkId(audioOutputDeviceId).catch(console.error);
+    }
     audioEl.play().catch(console.error);
 
     // Start remote speaking detection
@@ -226,7 +364,11 @@ export function useVoice() {
     remoteSpeakingCleanupsRef.current.set(peerId, cleanupRemote);
 
     await new Promise<void>((resolve) =>
-      socket.emit("voice:resumeConsumer", { consumerId: consumer.id }, resolve),
+      socket.emit(
+        "voice:resumeConsumer",
+        { channelId, consumerId: consumer.id },
+        resolve,
+      ),
     );
   };
 
@@ -263,5 +405,34 @@ export function useVoice() {
     }
   }, [localMuted, setLocalMuted]);
 
-  return { joinVoice, leaveVoice, toggleMute };
+  /**
+   * Change the outgoing audio bitrate at runtime.
+   * Updates the producer's RTP encoding limit on the client and notifies the
+   * server to adjust its incoming bitrate cap on the matching transport.
+   */
+  const setAudioBitrate = useCallback(
+    (socket: Socket, kbps: number) => {
+      setAudioBitrateKbps(kbps);
+      const bps = kbps * 1000;
+
+      // Update the local producer encoding limit
+      if (producerRef.current) {
+        producerRef.current
+          .setRtpEncodingParameters({ maxBitrate: bps })
+          .catch(console.error);
+      }
+
+      // Ask the server to apply the cap on its side too
+      if (socket && sendTransportRef.current) {
+        socket.emit("voice:setBitrate", {
+          channelId: channelIdRef.current,
+          transportId: sendTransportRef.current.id,
+          maxBitrateKbps: kbps,
+        });
+      }
+    },
+    [setAudioBitrateKbps],
+  );
+
+  return { joinVoice, leaveVoice, toggleMute, setAudioBitrate };
 }

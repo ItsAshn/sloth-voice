@@ -11,12 +11,13 @@ A locally-hosted Discord alternative. You self-host the server and connect with 
 
 ## Projects
 
-| Directory  | Description                    | Tech                                   |
-| ---------- | ------------------------------ | -------------------------------------- |
-| `server/`  | Backend API + WebSocket server | Node.js, Express, Socket.IO, mediasoup |
-| `desktop/` | Desktop client                 | Electron, React, Vite, Tailwind        |
-| `mobile/`  | Mobile client                  | React Native, Expo                     |
-| `client/`  | Web client (browser)           | React, Vite, Tailwind                  |
+| Directory                   | Description                    | Tech                                   |
+| --------------------------- | ------------------------------ | -------------------------------------- |
+| `server/`                   | Backend API + WebSocket server | Node.js, Express, Socket.IO, mediasoup |
+| `desktop/`                  | Desktop client                 | Electron, React, Vite, Tailwind        |
+| `mobile/`                   | Mobile client                  | React Native, Expo                     |
+| `client/`                   | Web client (browser)           | React, Vite, Tailwind                  |
+| `server/docker-compose.yml` | Container orchestration        | Docker, Docker Compose                 |
 
 ---
 
@@ -25,6 +26,7 @@ A locally-hosted Discord alternative. You self-host the server and connect with 
 - [Node.js](https://nodejs.org/) v20+
 - [npm](https://www.npmjs.com/) v9+
 - For mobile: [Expo Go](https://expo.dev/client) on your phone, or an Android/iOS emulator
+- For Docker hosting: [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) v2+
 
 ---
 
@@ -75,6 +77,8 @@ MEDIASOUP_LOG_LEVEL=warn
 
 ## 3. Run the Server
 
+### Option A — Node.js (local)
+
 ```bash
 cd server
 npm run dev
@@ -88,6 +92,15 @@ The server starts on `http://localhost:5000` by default. Visit `http://localhost
 | ------------- | --------------------------------- |
 | `npm run dev` | Start with nodemon (auto-restart) |
 | `npm start`   | Start without nodemon             |
+
+### Option B — Docker Compose
+
+See [**§ Hosting with Docker**](#hosting-with-docker) below for full details. Quick start:
+
+```bash
+cd server
+docker compose up -d
+```
 
 ---
 
@@ -184,6 +197,54 @@ This opens two terminal windows — one for the server and one for the desktop c
 | `PUBLIC_ADDRESS`      | `localhost`         | Public IP/hostname for WebRTC                                                   |
 | `RTC_MIN_PORT`        | `40000`             | Start of UDP port range for WebRTC                                              |
 | `RTC_MAX_PORT`        | `49999`             | End of UDP port range for WebRTC                                                |
+
+---
+
+## Hosting with Docker
+
+The `server/` directory ships with a `Dockerfile` and a `docker-compose.yml`. The image is built on `node:20-bookworm-slim` and includes the native build tools required by mediasoup.
+
+### 1. Create an env file
+
+Copy the example and fill in your values:
+
+```bash
+cd server
+cp .env.example .env   # edit .env before continuing
+```
+
+> **Important:** Set `JWT_SECRET` to a long random string and optionally set `SERVER_PASSWORD`. Docker Compose reads the `.env` file from the `server/` directory.
+
+### 2. Start the container
+
+```bash
+cd server
+docker compose up -d
+```
+
+This builds the image on first run and starts the server in the background. The SQLite database is persisted in the `server_data` Docker volume.
+
+### 3. Verify
+
+```bash
+curl http://localhost:5000/health
+```
+
+### Useful commands
+
+| Command                         | Description                      |
+| ------------------------------- | -------------------------------- |
+| `docker compose up -d`          | Start (build if needed)          |
+| `docker compose up -d --build`  | Force rebuild and start          |
+| `docker compose down`           | Stop and remove containers       |
+| `docker compose down -v`        | Stop and **delete** the database |
+| `docker compose logs -f server` | Tail server logs                 |
+
+### Voice (WebRTC / mediasoup) port range
+
+By default, Docker Compose exposes UDP ports `40000–40099` for WebRTC. The range is intentionally kept small for Docker compatibility. Adjust `RTC_MIN_PORT` / `RTC_MAX_PORT` in your `.env` and ensure the same range is open in your firewall.
+
+**Linux only:** replace the `ports` entries in `server/docker-compose.yml` with `network_mode: host` for zero-overhead voice (no port mapping needed).
 
 ---
 

@@ -4,6 +4,7 @@ import { useStore } from "../../store/useStore";
 import type { SavedServer } from "../../types";
 import AddServerModal from "../Modals/AddServerModal";
 import ExportModal from "../Modals/ExportModal";
+import SettingsModal from "../Modals/SettingsModal";
 
 export default function ServerList() {
   const {
@@ -17,6 +18,7 @@ export default function ServerList() {
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleSelect = (server: SavedServer) => {
     if (activeServer?.id !== server.id) {
@@ -140,12 +142,38 @@ export default function ServerList() {
         >
           ⇅
         </button>
+
+        {/* Spacer push settings to bottom */}
+        <div className="flex-1" />
+
+        {/* Settings */}
+        <button
+          onClick={() => setShowSettings(true)}
+          title="settings"
+          className="w-9 h-9 flex items-center justify-center text-text-muted hover:text-text-normal
+                     hover:bg-surface-highest rounded transition-all"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </nav>
 
       {showAdd && (
         <AddServerModal onClose={() => setShowAdd(false)} onAdded={handleAdd} />
       )}
       {showExport && <ExportModal onClose={() => setShowExport(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>
   );
 }

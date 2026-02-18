@@ -14,6 +14,7 @@
 
 import { useEffect } from "react";
 import { useStore } from "../store/useStore";
+import { useStoreHydrated } from "./useStoreHydrated";
 import type { Message, Channel } from "../types";
 
 // Minimal inline type for the background-notification bridge
@@ -73,9 +74,12 @@ export function useBackgroundNotifications(): void {
   const activeServer = useStore((s) => s.activeServer);
   const incrementMentions = useStore((s) => s.incrementMentions);
   const clearMentions = useStore((s) => s.clearMentions);
+  const hydrated = useStoreHydrated();
 
-  // Start / update watchers whenever the saved server list or sessions change
+  // Start / update watchers once the store is hydrated and whenever
+  // the saved server list or sessions subsequently change
   useEffect(() => {
+    if (!hydrated) return; // wait for localStorage sessions to load
     const bridge = getBridge();
     if (!bridge) return;
     savedServers.forEach((server) => {
@@ -94,7 +98,7 @@ export function useBackgroundNotifications(): void {
           /* main process will log errors */
         });
     });
-  }, [savedServers, sessions]);
+  }, [hydrated, savedServers, sessions]);
 
   // Keep tokens / userIds fresh when sessions change
   useEffect(() => {

@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const { getDb } = require("../db/database");
+const { requireAuth } = require("../middleware/auth");
 
 const JWT_SECRET = process.env.JWT_SECRET || "discard_server_secret_change_me";
 
@@ -131,6 +132,45 @@ router.get("/me", (req, res) => {
   } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
+});
+
+// PATCH /api/auth/profile — update own display_name and/or avatar
+router.patch("/profile", requireAuth, (req, res) => {
+  const { display_name, avatar } = req.body;
+  if (!display_name && avatar === undefined) {
+    return res.status(400).json({ error: "Nothing to update" });
+  }
+  const db = getDb();
+  const user = db
+    .prepare(
+      "SELECT id, username, display_name, avatar FROM users WHERE id = ?",
+    )
+    .get(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const newName = display_name?.trim() || user.display_name;
+  // avatar must be null, a data-URI string, or undefined (unchanged)
+  const newAvatar = avatar === null ? null : avatar || user.avatar;
+
+  db.prepare("UPDATE users SET display_name = ?, avatar = ? WHERE id = ?").run(
+    newName,
+    newAvatar,
+    req.user.id,
+  );
+
+  const { role } = db
+    .prepare("SELECT role FROM server_members WHERE user_id = ?")
+    .get(req.user.id);
+
+  return res.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      display_name: newName,
+      avatar: newAvatar,
+      role,
+    },
+  });
 });
 
 // GET /api/auth/users  — list members (for contacts/friends within server)

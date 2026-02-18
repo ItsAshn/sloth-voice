@@ -1,0 +1,36 @@
+services:
+  server:
+    image: ghcr.io/itsashn/discard-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # HTTP API + WebSocket
+      - "${SERVER_PORT:-5000}:5000"
+      # WebRTC / mediasoup UDP port range.
+      # Keep this range in sync with RTC_MIN_PORT / RTC_MAX_PORT below.
+      # On Linux you can replace the whole ports block with network_mode: host
+      # for vastly better voice performance (no NAT overhead).
+      - "${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}:${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}/udp"
+    environment:
+      SERVER_PORT: ${SERVER_PORT:-5000}
+      SERVER_NAME: ${SERVER_NAME:-My Discard Server}
+      SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-A locally-hosted Discard community}
+      SERVER_PASSWORD: ${SERVER_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-change_this_to_a_long_random_secret}
+      SERVER_DB_PATH: /data/server.db
+      MEDIASOUP_LISTEN_IP: ${MEDIASOUP_LISTEN_IP:-0.0.0.0}
+      PUBLIC_ADDRESS: ${PUBLIC_ADDRESS:-localhost}
+      RTC_MIN_PORT: ${RTC_MIN_PORT:-40000}
+      RTC_MAX_PORT: ${RTC_MAX_PORT:-40099}
+      MEDIASOUP_LOG_LEVEL: ${MEDIASOUP_LOG_LEVEL:-warn}
+      IS_PUBLIC: ${IS_PUBLIC:-false}
+      RELAY_URL: ${RELAY_URL:-}
+      SERVER_OWNER_TOKEN: ${SERVER_OWNER_TOKEN:-}
+    volumes:
+      # Persist the SQLite database across container restarts
+      - server_data:/data
+
+volumes:
+  server_data:

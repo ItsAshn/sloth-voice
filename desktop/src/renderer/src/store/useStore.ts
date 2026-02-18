@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type {
   SavedServer,
   Channel,
@@ -16,11 +17,16 @@ interface StoreState {
   // active server context
   activeServer: SavedServer | null;
   setActiveServer: (server: SavedServer | null) => void;
+  updateActiveServerName: (name: string) => void;
 
   // per-server sessions (token + user keyed by serverId)
   sessions: Record<string, ServerSession>;
   setSession: (serverId: string, session: ServerSession) => void;
   clearSession: (serverId: string) => void;
+  updateSessionUser: (
+    serverId: string,
+    patch: Partial<import("../types").User>,
+  ) => void;
 
   // channels
   channels: Channel[];
@@ -56,80 +62,133 @@ interface StoreState {
   setLocalMuted: (muted: boolean) => void;
   localSpeaking: boolean;
   setLocalSpeaking: (speaking: boolean) => void;
+  /** Client-preferred audio bitrate in kbps (e.g. 32, 64, 96, 128) */
+  audioBitrateKbps: number;
+  setAudioBitrateKbps: (kbps: number) => void;
+  audioInputDeviceId: string | null;
+  setAudioInputDeviceId: (id: string | null) => void;
+  audioOutputDeviceId: string | null;
+  setAudioOutputDeviceId: (id: string | null) => void;
 }
 
-export const useStore = create<StoreState>((set) => ({
-  savedServers: [],
-  setSavedServers: (servers) => set({ savedServers: servers }),
+export const useStore = create<StoreState>()(
+  persist(
+    (set) => ({
+      savedServers: [],
+      setSavedServers: (servers) => set({ savedServers: servers }),
 
-  activeServer: null,
-  setActiveServer: (server) =>
-    set({
-      activeServer: server,
-      activeChannel: null,
-      messages: [],
+      activeServer: null,
+      setActiveServer: (server) =>
+        set({
+          activeServer: server,
+          activeChannel: null,
+          activeVoiceChannel: null,
+          messages: [],
+          channels: [],
+          voicePeers: [],
+        }),
+      updateActiveServerName: (name) =>
+        set((s) => {
+          if (!s.activeServer) return {};
+          const updated = { ...s.activeServer, name };
+          return {
+            activeServer: updated,
+            savedServers: s.savedServers.map((sv) =>
+              sv.id === updated.id ? updated : sv,
+            ),
+          };
+        }),
+
+      sessions: {},
+      setSession: (serverId, session) =>
+        set((s) => ({ sessions: { ...s.sessions, [serverId]: session } })),
+      clearSession: (serverId) =>
+        set((s) => {
+          const { [serverId]: _, ...rest } = s.sessions;
+          return { sessions: rest };
+        }),
+      updateSessionUser: (serverId, patch) =>
+        set((s) => {
+          const existing = s.sessions[serverId];
+          if (!existing) return {};
+          return {
+            sessions: {
+              ...s.sessions,
+              [serverId]: { ...existing, user: { ...existing.user, ...patch } },
+            },
+          };
+        }),
+
       channels: [],
+      setChannels: (channels) => set({ channels }),
+
+      activeChannel: null,
+      setActiveChannel: (channel) =>
+        set({ activeChannel: channel, messages: [] }),
+
+      messages: [],
+      setMessages: (messages) => set({ messages }),
+      addMessage: (message) =>
+        set((s) => ({
+          messages: s.messages.some((m) => m.id === message.id)
+            ? s.messages
+            : [...s.messages, message],
+        })),
+
+      members: [],
+      setMembers: (members) => set({ members }),
+
+      mentionCounts: {},
+      incrementMentions: (serverId, by = 1) =>
+        set((s) => ({
+          mentionCounts: {
+            ...s.mentionCounts,
+            [serverId]: (s.mentionCounts[serverId] ?? 0) + by,
+          },
+        })),
+      clearMentions: (serverId) =>
+        set((s) => {
+          const { [serverId]: _, ...rest } = s.mentionCounts;
+          return { mentionCounts: rest };
+        }),
+
+      activeVoiceChannel: null,
+      setActiveVoiceChannel: (channel) => set({ activeVoiceChannel: channel }),
+
       voicePeers: [],
+      setVoicePeers: (peers) => set({ voicePeers: peers }),
+      addVoicePeer: (peer) =>
+        set((s) => ({ voicePeers: [...s.voicePeers, peer] })),
+      removeVoicePeer: (id) =>
+        set((s) => ({ voicePeers: s.voicePeers.filter((p) => p.id !== id) })),
+      updateVoicePeer: (id, patch) =>
+        set((s) => ({
+          voicePeers: s.voicePeers.map((p) =>
+            p.id === id ? { ...p, ...patch } : p,
+          ),
+        })),
+
+      localMuted: false,
+      setLocalMuted: (muted) => set({ localMuted: muted }),
+      localSpeaking: false,
+      setLocalSpeaking: (speaking) => set({ localSpeaking: speaking }),
+      audioBitrateKbps: 64,
+      setAudioBitrateKbps: (kbps) => set({ audioBitrateKbps: kbps }),
+      audioInputDeviceId: null,
+      setAudioInputDeviceId: (id) => set({ audioInputDeviceId: id }),
+      audioOutputDeviceId: null,
+      setAudioOutputDeviceId: (id) => set({ audioOutputDeviceId: id }),
     }),
-
-  sessions: {},
-  setSession: (serverId, session) =>
-    set((s) => ({ sessions: { ...s.sessions, [serverId]: session } })),
-  clearSession: (serverId) =>
-    set((s) => {
-      const { [serverId]: _, ...rest } = s.sessions;
-      return { sessions: rest };
-    }),
-
-  channels: [],
-  setChannels: (channels) => set({ channels }),
-
-  activeChannel: null,
-  setActiveChannel: (channel) => set({ activeChannel: channel, messages: [] }),
-
-  messages: [],
-  setMessages: (messages) => set({ messages }),
-  addMessage: (message) =>
-    set((s) => ({
-      messages: s.messages.some((m) => m.id === message.id)
-        ? s.messages
-        : [...s.messages, message],
-    })),
-
-  members: [],
-  setMembers: (members) => set({ members }),
-
-  mentionCounts: {},
-  incrementMentions: (serverId, by = 1) =>
-    set((s) => ({
-      mentionCounts: {
-        ...s.mentionCounts,
-        [serverId]: (s.mentionCounts[serverId] ?? 0) + by,
-      },
-    })),
-  clearMentions: (serverId) =>
-    set((s) => {
-      const { [serverId]: _, ...rest } = s.mentionCounts;
-      return { mentionCounts: rest };
-    }),
-
-  activeVoiceChannel: null,
-  setActiveVoiceChannel: (channel) => set({ activeVoiceChannel: channel }),
-
-  voicePeers: [],
-  setVoicePeers: (peers) => set({ voicePeers: peers }),
-  addVoicePeer: (peer) => set((s) => ({ voicePeers: [...s.voicePeers, peer] })),
-  removeVoicePeer: (id) =>
-    set((s) => ({ voicePeers: s.voicePeers.filter((p) => p.id !== id) })),
-  updateVoicePeer: (id, patch) =>
-    set((s) => ({
-      voicePeers: s.voicePeers.map((p) =>
-        p.id === id ? { ...p, ...patch } : p,
-      ),
-    })),
-
-  localMuted: false,
-  setLocalMuted: (muted) => set({ localMuted: muted }),
-  localSpeaking: false,
-  setLocalSpeaking: (speaking) => set({ localSpeaking: speaking }),
-}));
+    {
+      name: "discard-saved-servers",
+      // Persist the server list and per-server login sessions
+      partialize: (state) => ({
+        savedServers: state.savedServers,
+        sessions: state.sessions,
+        audioInputDeviceId: state.audioInputDeviceId,
+        audioOutputDeviceId: state.audioOutputDeviceId,
+        audioBitrateKbps: state.audioBitrateKbps,
+      }),
+    },
+  ),
+);

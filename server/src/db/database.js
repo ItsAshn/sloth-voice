@@ -12,6 +12,8 @@ function getDb() {
 
 function initDb() {
   const database = getDb();
+  // Run incremental migrations first so new tables are added to existing DBs
+  runMigrations(database);
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -81,6 +83,11 @@ function initDb() {
       FOREIGN KEY (message_id) REFERENCES messages(id)
     );
 
+    CREATE TABLE IF NOT EXISTS server_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- Seed default channels if none exist
     INSERT OR IGNORE INTO channels (id, name, type, position) VALUES
       ('general', 'general', 'text', 0),
@@ -89,6 +96,16 @@ function initDb() {
       ('voice-2', 'Voice 2', 'voice', 3);
   `);
   console.log("✅ Local server database initialized");
+}
+
+// Incremental migrations — safe to run on every startup
+function runMigrations(database) {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS server_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
 }
 
 module.exports = { getDb, initDb };

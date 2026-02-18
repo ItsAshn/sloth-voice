@@ -11,7 +11,8 @@ import {
 } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { autoUpdater } from "electron-updater";
+import updaterPkg from "electron-updater";
+const { autoUpdater } = updaterPkg;
 import Store from "electron-store";
 import { io as ioClient, Socket } from "socket.io-client";
 

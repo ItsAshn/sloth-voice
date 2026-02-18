@@ -4,12 +4,51 @@ The self-hostable backend for **Discard** — a locally-hosted Discord alternati
 
 Connect with the [desktop](https://github.com/ItsAshn/discard) or mobile client.
 
-## Requirements
+---
+
+## Quick Start (Docker — recommended)
+
+Docker is the easiest way to run and **keep the server up to date**. No Node.js required.
+
+**Requirements:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) v2+
+
+```bash
+# 1. Download the compose file
+curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/main/docker-compose.yml
+
+# 2. Create your .env (edit the values before starting)
+curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/main/.env.example
+cp .env.example .env
+```
+
+Edit `.env` — at minimum set `JWT_SECRET` and `PUBLIC_ADDRESS`, then start:
+
+```bash
+docker compose up -d
+```
+
+The server starts on `http://localhost:5000` (or your configured `SERVER_PORT`).  
+Check `http://localhost:5000/health` to verify it is running.
+
+### Updating to the latest version
+
+```bash
+docker compose pull          # fetch the newest image from ghcr.io
+docker compose up -d         # restart the container with the new image
+```
+
+Your database is stored in a Docker volume (`server_data`) and is **not affected** by updates.
+
+---
+
+## Manual Setup (Node.js)
+
+### Requirements
 
 - [Node.js](https://nodejs.org/) v20+
 - npm v9+
 
-## Setup
+### Setup
 
 ```bash
 git clone https://github.com/ItsAshn/discard-server.git
@@ -43,7 +82,7 @@ RTC_MAX_PORT=49999
 
 > **Important:** Set `SERVER_PASSWORD` and `JWT_SECRET` before sharing with anyone.
 
-## Run
+### Run
 
 ```bash
 # Development (auto-restarts on file changes)
@@ -55,6 +94,16 @@ npm start
 
 The server starts on `http://localhost:5000` (or your configured `SERVER_PORT`).  
 Check `http://localhost:5000/health` to verify it is running.
+
+### Updating
+
+```bash
+git pull
+npm install        # in case dependencies changed
+npm start
+```
+
+---
 
 ## Hosting on a LAN or the Internet
 

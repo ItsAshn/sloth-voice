@@ -1,11 +1,16 @@
 // Server info + invite system (no relay needed)
 const router = require("express").Router();
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireAdmin } = require("../middleware/auth");
+const { getDb } = require("../db/database");
 
 // GET /api/server/info — public info shown before joining
 router.get("/info", (_req, res) => {
+  const db = getDb();
+  const nameSetting = db
+    .prepare("SELECT value FROM server_settings WHERE key = 'name'")
+    .get();
   return res.json({
-    name: process.env.SERVER_NAME || "Discard Server",
+    name: nameSetting?.value || process.env.SERVER_NAME || "Discard Server",
     description:
       process.env.SERVER_DESCRIPTION || "A locally-hosted Discard server",
     // Tell clients whether a password is required, without revealing it
@@ -13,6 +18,19 @@ router.get("/info", (_req, res) => {
       process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
     ),
   });
+});
+
+// PATCH /api/server/settings — admin: update server name
+router.patch("/settings", requireAuth, requireAdmin, (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) {
+    return res.status(400).json({ error: "name is required" });
+  }
+  const db = getDb();
+  db.prepare(
+    "INSERT INTO server_settings (key, value) VALUES ('name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(name.trim());
+  return res.json({ name: name.trim() });
 });
 
 /**

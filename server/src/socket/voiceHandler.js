@@ -1,12 +1,30 @@
 /**
  * Mediasoup SFU signaling via Socket.io
- * Each voice channel is a mediasoup Router.
- * Clients create Producers (send audio/video) and Consumers (receive).
+ *
+ * Protocol (client ↔ server):
+ *
+ *  Client emits                                           Server responds / broadcasts
+ *  ──────────────────────────────────────────────────── ──────────────────────────────────────────
+ *  voice:join  { channelId, username, userId }           callback({ rtpCapabilities, peers[] })
+ *  voice:createTransport { channelId, direction }        callback(TransportOptions)
+ *  voice:connectTransport { channelId, transportId, dtlsParameters }  callback({ ok })
+ *  voice:produce { channelId, transportId, kind, rtpParameters }      callback({ id })
+ *    └─ server broadcasts voice:newPeer to existing peers after first produce
+ *  voice:consume { channelId, peerId, rtpCapabilities }  callback(ConsumerOptions)
+ *  voice:resumeConsumer { channelId, consumerId }        callback()
+ *  voice:leave { channelId }
+ *  voice:speaking { channelId, speaking }                (server logs)
+ *  voice:setBitrate { channelId, transportId, maxBitrateKbps }
+ *
+ *  Server → Client events:
+ *  voice:newPeer  { peerId, userId, username }           (new peer is now producing)
+ *  voice:peerLeft { peerId }
+ *  voice:consumerClosed { consumerId }
  */
 
 const { getWorker } = require("../mediasoup/worker");
 
-// channelId -> { router, producers: Map, consumers: Map, peers: Map<socketId, {transports,producers,consumers}> }
+// channelId -> { router, peers: Map<socketId, PeerState> }
 const voiceRooms = new Map();
 
 const MEDIA_CODECS = [
@@ -30,43 +48,57 @@ async function getOrCreateRoom(channelId) {
   const router = await worker.createRouter({ mediaCodecs: MEDIA_CODECS });
   const room = {
     router,
-    peers: new Map(), // socketId -> { transports, producers, consumers }
+    peers: new Map(), // socketId -> PeerState
   };
   voiceRooms.set(channelId, room);
   return room;
 }
 
 function registerVoiceHandlers(io, socket) {
-  // Join voice channel
+  // ── Join ─────────────────────────────────────────────────────────────────
+  // Returns router RTP capabilities + list of peers that are ALREADY producing.
+  // We do NOT broadcast voice:newPeer here; that fires from voice:produce so
+  // existing peers never try to consume a peer before it has a producer.
   socket.on("voice:join", async ({ channelId, userId, username }, callback) => {
     try {
       const room = await getOrCreateRoom(channelId);
       socket.join(`voice:${channelId}`);
 
       room.peers.set(socket.id, {
-        userId,
-        username,
-        transports: new Map(),
-        producers: new Map(),
-        consumers: new Map(),
+        userId: userId ?? socket.id,
+        username: username ?? "Unknown",
+        transports: new Map(), // transportId -> transport (has ._direction)
+        producers: new Map(), // producerId  -> producer
+        consumers: new Map(), // consumerId  -> consumer
+        announced: false, // true once voice:newPeer has been emitted for this peer
       });
 
-      // Tell existing peers that a new peer joined
-      socket.to(`voice:${channelId}`).emit("voice:peer:joined", {
-        socketId: socket.id,
-        userId,
-        username,
+      // Only return peers that are already producing
+      const peers = [];
+      room.peers.forEach((peer, peerSocketId) => {
+        if (peerSocketId !== socket.id && peer.announced) {
+          peers.push({
+            peerId: peerSocketId,
+            userId: peer.userId,
+            username: peer.username,
+          });
+        }
       });
 
-      // Return RTP capabilities so client can create device
-      callback({ rtpCapabilities: room.router.rtpCapabilities });
+      console.log(
+        `[voice] JOIN     | channel=${channelId} | user=${username} | existingPeers=${peers.length}`,
+      );
+
+      callback({ rtpCapabilities: room.router.rtpCapabilities, peers });
     } catch (err) {
       console.error("voice:join error", err);
       callback({ error: err.message });
     }
   });
 
-  // Create WebRTC transport (one for send, one for receive)
+  // ── Create WebRTC transport ─────────────────────────────────────────────
+  // direction is tagged on the transport object so we can find the recv
+  // transport automatically during consume without the client sending it.
   socket.on(
     "voice:createTransport",
     async ({ channelId, direction }, callback) => {
@@ -84,7 +116,11 @@ function registerVoiceHandlers(io, socket) {
           enableUdp: true,
           enableTcp: true,
           preferUdp: true,
+          initialAvailableOutgoingBitrate:
+            parseInt(process.env.AUDIO_BITRATE_KBPS || "64", 10) * 1000,
         });
+
+        transport._direction = direction; // tag for later lookup
 
         const peer = room.peers.get(socket.id);
         if (peer) peer.transports.set(transport.id, transport);
@@ -122,7 +158,8 @@ function registerVoiceHandlers(io, socket) {
     },
   );
 
-  // Produce (start sending audio/video)
+  // ── Produce (client starts sending audio) ──────────────────────────────
+  // On the first produce we announce the peer to everyone already in the room.
   socket.on(
     "voice:produce",
     async ({ channelId, transportId, kind, rtpParameters }, callback) => {
@@ -137,12 +174,18 @@ function registerVoiceHandlers(io, socket) {
 
         producer.on("transportclose", () => producer.close());
 
-        // Notify other peers
-        socket.to(`voice:${channelId}`).emit("voice:newProducer", {
-          producerId: producer.id,
-          socketId: socket.id,
-          kind,
-        });
+        // Announce to existing peers on first produce so they can consume this peer.
+        if (!peer.announced) {
+          peer.announced = true;
+          console.log(
+            `[voice] PRODUCE  | channel=${channelId} | user=${peer.username} | kind=${kind}`,
+          );
+          socket.to(`voice:${channelId}`).emit("voice:newPeer", {
+            peerId: socket.id,
+            userId: peer.userId,
+            username: peer.username,
+          });
+        }
 
         callback({ id: producer.id });
       } catch (err) {
@@ -151,34 +194,66 @@ function registerVoiceHandlers(io, socket) {
     },
   );
 
-  // Consume (start receiving audio/video from a producer)
+  // ── Consume (client wants to hear a specific peer) ──────────────────────
+  // Client sends { channelId, peerId, rtpCapabilities }.
+  // Server finds the requesting client's recv transport and the target
+  // peer's first audio producer automatically — no transportId/producerId needed.
   socket.on(
     "voice:consume",
-    async (
-      { channelId, transportId, producerId, rtpCapabilities },
-      callback,
-    ) => {
+    async ({ channelId, peerId, rtpCapabilities }, callback) => {
       try {
         const room = voiceRooms.get(channelId);
-        const peer = room?.peers.get(socket.id);
-        const transport = peer?.transports.get(transportId);
-        if (!transport) return callback({ error: "Transport not found" });
+        const requestingPeer = room?.peers.get(socket.id);
+        if (!requestingPeer)
+          return callback({ error: "Requesting peer not found" });
+
+        // Find this socket's recv transport
+        let recvTransport = null;
+        for (const [, t] of requestingPeer.transports) {
+          if (t._direction === "recv") {
+            recvTransport = t;
+            break;
+          }
+        }
+        if (!recvTransport)
+          return callback({
+            error: "Recv transport not found — call createTransport first",
+          });
+
+        // Find the target peer's first audio producer
+        const targetPeer = room.peers.get(peerId);
+        if (!targetPeer) return callback({ error: "Target peer not found" });
+
+        let producerId = null;
+        for (const [id, producer] of targetPeer.producers) {
+          if (producer.kind === "audio") {
+            producerId = id;
+            break;
+          }
+        }
+        if (!producerId)
+          return callback({ error: "Target peer has no audio producer yet" });
 
         if (!room.router.canConsume({ producerId, rtpCapabilities }))
-          return callback({ error: "Cannot consume" });
+          return callback({ error: "Router cannot consume this producer" });
 
-        const consumer = await transport.consume({
+        // Create paused; client calls voice:resumeConsumer after transport is set up
+        const consumer = await recvTransport.consume({
           producerId,
           rtpCapabilities,
-          paused: false,
+          paused: true,
         });
 
-        peer.consumers.set(consumer.id, consumer);
+        requestingPeer.consumers.set(consumer.id, consumer);
         consumer.on("transportclose", () => consumer.close());
         consumer.on("producerclose", () => {
           consumer.close();
           socket.emit("voice:consumerClosed", { consumerId: consumer.id });
         });
+
+        console.log(
+          `[voice] CONSUME  | channel=${channelId} | ${requestingPeer.username} ← ${targetPeer.username}`,
+        );
 
         callback({
           id: consumer.id,
@@ -187,52 +262,61 @@ function registerVoiceHandlers(io, socket) {
           rtpParameters: consumer.rtpParameters,
         });
       } catch (err) {
+        console.error("voice:consume error", err);
         callback({ error: err.message });
       }
     },
   );
 
-  // Get existing producers in a room (so new joiners can subscribe)
-  socket.on("voice:getProducers", ({ channelId }, callback) => {
-    const room = voiceRooms.get(channelId);
-    if (!room) return callback({ producers: [] });
-
-    const producers = [];
-    room.peers.forEach((peer, peerSocketId) => {
-      if (peerSocketId !== socket.id) {
-        peer.producers.forEach((producer) => {
-          producers.push({
-            producerId: producer.id,
-            socketId: peerSocketId,
-            kind: producer.kind,
-          });
-        });
+  // ── Resume consumer ──────────────────────────────────────────────────────
+  socket.on(
+    "voice:resumeConsumer",
+    async ({ channelId, consumerId }, callback) => {
+      try {
+        const room = voiceRooms.get(channelId);
+        const peer = room?.peers.get(socket.id);
+        const consumer = peer?.consumers.get(consumerId);
+        if (consumer) await consumer.resume();
+        if (typeof callback === "function") callback();
+      } catch (err) {
+        console.error("voice:resumeConsumer error", err.message);
+        if (typeof callback === "function") callback();
       }
-    });
-    callback({ producers });
+    },
+  );
+
+  // ── Speaking indicator (VAD telemetry) ───────────────────────────────────
+  socket.on("voice:speaking", () => {
+    // no-op: event handled client-side only
   });
 
-  // Close producer (mute)
-  socket.on("voice:closeProducer", ({ channelId, producerId }) => {
-    const room = voiceRooms.get(channelId);
-    const peer = room?.peers.get(socket.id);
-    const producer = peer?.producers.get(producerId);
-    if (producer) {
-      producer.close();
-      peer.producers.delete(producerId);
-      socket
-        .to(`voice:${channelId}`)
-        .emit("voice:producerClosed", { producerId, socketId: socket.id });
-    }
-  });
+  // ── Set outgoing bitrate cap ─────────────────────────────────────────────
+  socket.on(
+    "voice:setBitrate",
+    async ({ channelId, transportId, maxBitrateKbps }) => {
+      try {
+        const room = voiceRooms.get(channelId);
+        const peer = room?.peers.get(socket.id);
+        const transport = peer?.transports.get(transportId);
+        if (!transport) return;
 
-  // Leave voice channel
+        const bps = Math.max(8000, Math.min(512000, maxBitrateKbps * 1000));
+        await transport.setMaxIncomingBitrate(bps);
+        console.log(
+          `[voice] BITRATE  | channel=${channelId} | user=${peer?.username} | ${bps / 1000} kbps`,
+        );
+      } catch (err) {
+        console.error("voice:setBitrate error", err.message);
+      }
+    },
+  );
+
+  // ── Leave voice channel ──────────────────────────────────────────────────
   socket.on("voice:leave", (payload) => {
     const channelId = payload?.channelId;
     if (channelId) {
       cleanupPeer(socket.id, channelId, io);
     } else {
-      // Fallback: clean up from all rooms this socket is in
       voiceRooms.forEach((_room, id) => cleanupPeer(socket.id, id, io));
     }
   });
@@ -250,16 +334,21 @@ function cleanupPeer(socketId, channelId, io) {
   const peer = room.peers.get(socketId);
   if (!peer) return;
 
+  console.log(
+    `[voice] LEFT     | channel=${channelId} | user=${peer.username}`,
+  );
+
   peer.producers.forEach((p) => p.close());
   peer.consumers.forEach((c) => c.close());
   peer.transports.forEach((t) => t.close());
   room.peers.delete(socketId);
 
-  io.to(`voice:${channelId}`).emit("voice:peer:left", { socketId });
+  io.to(`voice:${channelId}`).emit("voice:peerLeft", { peerId: socketId });
 
   if (room.peers.size === 0) {
     room.router.close();
     voiceRooms.delete(channelId);
+    console.log(`[voice] ROOM_DEL | channel=${channelId} (empty)`);
   }
 }
 

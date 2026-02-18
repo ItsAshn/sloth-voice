@@ -115,3 +115,23 @@ export async function fetchMembers(): Promise<Member[]> {
   const res = await client().get("/api/auth/users");
   return res.data.users ?? res.data;
 }
+
+// Profile
+export async function updateProfile(
+  display_name?: string,
+  avatar?: string | null,
+): Promise<User> {
+  const res = await client().patch("/api/auth/profile", {
+    display_name,
+    avatar,
+  });
+  return res.data.user ?? res.data;
+}
+
+// Server settings (admin)
+export async function updateServerSettings(
+  name: string,
+): Promise<{ name: string }> {
+  const res = await client().patch("/api/server/settings", { name });
+  return res.data;
+}

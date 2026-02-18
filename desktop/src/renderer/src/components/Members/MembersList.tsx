@@ -15,7 +15,7 @@ export default function MembersList() {
   if (!activeServer || !session) return null;
 
   return (
-    <div className="w-44 bg-surface-low shrink-0 flex flex-col border-l border-surface-mid">
+    <div className="flex-1 bg-surface-low flex flex-col overflow-hidden">
       <div className="px-3 h-11 flex items-center border-b border-surface-mid">
         <span className="label-xs">members ({members.length})</span>
       </div>
@@ -25,8 +25,21 @@ export default function MembersList() {
             key={m.id}
             className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-highest cursor-default transition-colors"
           >
-            <div className="w-6 h-6 rounded bg-brand-primary/20 border border-brand-primary/30 flex items-center justify-center text-[10px] font-bold text-brand-primary shrink-0">
-              {(m.display_name || m.username).slice(0, 1).toUpperCase()}
+            <div className="w-6 h-6 rounded bg-brand-primary/20 border border-brand-primary/30 flex items-center justify-center text-[10px] font-bold text-brand-primary shrink-0 overflow-hidden relative">
+              <span>
+                {(m.display_name || m.username).slice(0, 1).toUpperCase()}
+              </span>
+              {m.avatar && (
+                <img
+                  src={m.avatar}
+                  alt="avatar"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display =
+                      "none";
+                  }}
+                />
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-text-normal text-[11px] font-medium truncate">

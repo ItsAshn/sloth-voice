@@ -13,11 +13,10 @@ export default function AppLayout() {
       {/* Server rail */}
       <ServerList />
 
-      {/* Channel sidebar + voice panel */}
+      {/* Channel sidebar */}
       {activeServer && (
         <div className="flex flex-col w-56 shrink-0">
           <ChannelList />
-          <VoiceChannel />
         </div>
       )}
 
@@ -26,8 +25,13 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Members sidebar */}
-      {activeServer && <MembersList />}
+      {/* Members sidebar + voice panel */}
+      {activeServer && (
+        <div className="flex flex-col w-44 shrink-0 border-l border-surface-mid">
+          <VoiceChannel />
+          <MembersList />
+        </div>
+      )}
     </div>
   );
 }

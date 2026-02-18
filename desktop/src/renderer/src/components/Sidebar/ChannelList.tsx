@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useStore } from "../../store/useStore";
 import { fetchChannels, createChannel, configureApi } from "../../api/server";
 import AuthModal from "../Auth/AuthModal";
+import ServerMenuModal from "../Modals/ServerMenuModal";
+import { useStoreHydrated } from "../../hooks/useStoreHydrated";
 
 export default function ChannelList() {
   const {
@@ -13,8 +15,11 @@ export default function ChannelList() {
     setActiveChannel,
     activeVoiceChannel,
     setActiveVoiceChannel,
+    clearSession,
   } = useStore();
+  const hydrated = useStoreHydrated();
   const [showAuth, setShowAuth] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelType, setNewChannelType] = useState<"text" | "voice">(
     "text",
@@ -26,14 +31,25 @@ export default function ChannelList() {
 
   useEffect(() => {
     if (!activeServer) return;
+    if (!hydrated) return; // wait for localStorage sessions to load
     if (!session) {
       setShowAuth(true);
       return;
     }
     setShowAuth(false);
     configureApi(activeServer.url, session.token);
-    fetchChannels().then(setChannels).catch(console.error);
-  }, [activeServer?.id, session?.token, setChannels]);
+    fetchChannels()
+      .then(setChannels)
+      .catch((err) => {
+        // Token expired or revoked — clear the session and re-authenticate
+        if (err?.response?.status === 401) {
+          clearSession(activeServer.id);
+          setShowAuth(true);
+        } else {
+          console.error(err);
+        }
+      });
+  }, [activeServer?.id, session?.token, hydrated, setChannels]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,9 +77,16 @@ export default function ChannelList() {
           <span className="text-text-muted text-[10px] tracking-widest uppercase">
             //&nbsp;
           </span>
-          <span className="text-text-normal text-xs font-semibold truncate tracking-wide">
+          <span className="text-text-normal text-xs font-semibold truncate tracking-wide flex-1">
             {activeServer.name}
           </span>
+          <button
+            onClick={() => setShowMenu(true)}
+            title="server menu"
+            className="text-text-muted hover:text-text-normal transition-colors p-1 rounded hover:bg-surface-highest shrink-0 font-mono text-sm leading-none"
+          >
+            ···
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
@@ -151,8 +174,19 @@ export default function ChannelList() {
         {/* User info footer */}
         {session && (
           <div className="flex items-center gap-2 px-3 py-2 border-t border-surface-mid bg-surface-lowest">
-            <div className="w-6 h-6 rounded bg-brand-primary flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-              {session.user.display_name.slice(0, 1).toUpperCase()}
+            <div className="w-6 h-6 rounded bg-brand-primary flex items-center justify-center text-[10px] font-bold text-white shrink-0 overflow-hidden relative">
+              <span>{session.user.display_name.slice(0, 1).toUpperCase()}</span>
+              {session.user.avatar && (
+                <img
+                  src={session.user.avatar}
+                  alt="avatar"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display =
+                      "none";
+                  }}
+                />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-text-normal text-[11px] font-medium truncate">
@@ -179,6 +213,7 @@ export default function ChannelList() {
           onClose={() => setShowAuth(false)}
         />
       )}
+      {showMenu && <ServerMenuModal onClose={() => setShowMenu(false)} />}
     </>
   );
 }
