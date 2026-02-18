@@ -1,9 +1,10 @@
 # ── Build stage ────────────────────────────────────────────────────────────────
 # mediasoup compiles native C++ bindings, so we need full build tools.
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
+    python3-pip \
     make \
     g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -11,10 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # ── Runtime stage ──────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # mediasoup worker binary depends on libstdc++ at runtime
@@ -36,5 +37,5 @@ ENV SERVER_DB_PATH=/data/server.db
 
 EXPOSE 5000
 
-# node:sqlite is behind the --experimental-sqlite flag (Node 20)
+# node:sqlite is behind the --experimental-sqlite flag (Node 22)
 CMD ["node", "--experimental-sqlite", "src/index.js"]

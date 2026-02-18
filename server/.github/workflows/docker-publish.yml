@@ -23,29 +23,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Bump versions and commit
         if: startsWith(github.ref, 'refs/tags/')
-        id: version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          echo "version=${TAG}" >> $GITHUB_OUTPUT
-          echo "version_num=${TAG#v}" >> $GITHUB_OUTPUT
-
-      - name: Bump package.json and docker-compose versions
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
+          VERSION_NUM="${TAG#v}"
           # Update package.json version
-          npm version ${{ steps.version.outputs.version_num }} --no-git-tag-version
+          npm version "$VERSION_NUM" --no-git-tag-version
           # Update docker-compose.yml image tag to pinned version
-          sed -i "s|image: ghcr.io/itsashn/discard-server:.*|image: ghcr.io/itsashn/discard-server:${{ steps.version.outputs.version }}|" docker-compose.yml
-
-      - name: Commit version bumps
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
+          sed -i "s|image: ghcr.io/itsashn/discard-server:.*|image: ghcr.io/itsashn/discard-server:${TAG}|" docker-compose.yml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json docker-compose.yml
-          git diff --staged --quiet || git commit -m "chore: bump versions to ${{ steps.version.outputs.version }} [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: bump versions to ${TAG} [skip ci]"
           git push origin HEAD:refs/heads/main
 
       - name: Log in to GitHub Container Registry
