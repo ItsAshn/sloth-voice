@@ -27,16 +27,20 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VERSION_NUM="${TAG#v}"
+          VERSION_NUM=$(echo "$TAG" | sed 's/^[vV]//')
+          echo "Tag: $TAG  Version: $VERSION_NUM"
+          # Switch to main and apply version bumps there
+          git fetch origin master
+          git checkout master
           # Update package.json version
-          npm version "$VERSION_NUM" --no-git-tag-version
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$VERSION_NUM';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
           # Update docker-compose.yml image tag to pinned version
           sed -i "s|image: ghcr.io/itsashn/discard-server:.*|image: ghcr.io/itsashn/discard-server:${TAG}|" docker-compose.yml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json docker-compose.yml
           git diff --staged --quiet || git commit -m "chore: bump versions to ${TAG} [skip ci]"
-          git push origin HEAD:refs/heads/main
+          git push origin master
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
