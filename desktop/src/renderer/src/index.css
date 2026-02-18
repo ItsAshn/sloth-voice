@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  }
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e1f38;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #7b72f0;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-primary hover:bg-brand-hover text-white font-medium py-1.5 px-4 rounded
+           transition-colors text-sm tracking-wide;
+  }
+  .btn-danger {
+    @apply border border-danger text-danger hover:bg-danger hover:text-white font-medium
+           py-1.5 px-4 rounded transition-colors text-sm;
+  }
+  .btn-ghost {
+    @apply text-text-muted hover:text-text-normal hover:bg-surface-highest px-3 py-1.5
+           rounded transition-colors text-sm;
+  }
+  .input-field {
+    @apply w-full bg-surface-lowest text-text-normal rounded px-3 py-2 outline-none
+           border border-surface-highest focus:border-brand-primary
+           placeholder:text-text-muted text-sm font-mono transition-colors;
+  }
+  .channel-item {
+    @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-text-muted
+           hover:bg-surface-highest hover:text-text-normal transition-colors text-sm font-mono;
+  }
+  .channel-item.active {
+    @apply bg-surface-highest text-text-normal;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/70;
+  }
+  .modal-box {
+    @apply bg-surface-low border border-surface-highest rounded w-full p-6 shadow-2xl;
+  }
+  .modal-title {
+    @apply text-text-normal text-lg font-semibold mb-4 tracking-wide;
+  }
+  .label-xs {
+    @apply text-[10px] font-semibold text-text-muted uppercase tracking-widest block mb-1;
+  }
+}

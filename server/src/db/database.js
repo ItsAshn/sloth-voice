@@ -1,0 +1,94 @@
+const { DatabaseSync } = require("node:sqlite");
+const path = require("path");
+
+const DB_PATH =
+  process.env.SERVER_DB_PATH || path.join(__dirname, "../../server.db");
+let db;
+
+function getDb() {
+  if (!db) db = new DatabaseSync(DB_PATH);
+  return db;
+}
+
+function initDb() {
+  const database = getDb();
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      avatar TEXT DEFAULT NULL,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS channels (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'text',
+      topic TEXT DEFAULT NULL,
+      position INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      author_username TEXT NOT NULL,
+      content TEXT NOT NULL,
+      edited_at INTEGER DEFAULT NULL,
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY (channel_id) REFERENCES channels(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      url TEXT NOT NULL,
+      size INTEGER,
+      FOREIGN KEY (message_id) REFERENCES messages(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS direct_messages (
+      id TEXT PRIMARY KEY,
+      from_id TEXT NOT NULL,
+      from_username TEXT NOT NULL,
+      to_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS server_members (
+      user_id TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'member',
+      joined_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mentions (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      author_username TEXT NOT NULL,
+      mentioned_user_id TEXT,          -- NULL means @everyone / @here
+      mention_type TEXT NOT NULL DEFAULT 'user',  -- 'user' | 'everyone' | 'here'
+      content TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY (message_id) REFERENCES messages(id)
+    );
+
+    -- Seed default channels if none exist
+    INSERT OR IGNORE INTO channels (id, name, type, position) VALUES
+      ('general', 'general', 'text', 0),
+      ('announcements', 'announcements', 'text', 1),
+      ('voice-1', 'Voice 1', 'voice', 2),
+      ('voice-2', 'Voice 2', 'voice', 3);
+  `);
+  console.log("✅ Local server database initialized");
+}
+
+module.exports = { getDb, initDb };

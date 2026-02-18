@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Discard",
+    "slug": "discard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "discard",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#111214"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.discard.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#5865F2"
+      },
+      "package": "com.discard.mobile"
+    },
+    "plugins": ["expo-camera", "expo-av"]
+  }
+}

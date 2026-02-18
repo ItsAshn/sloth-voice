@@ -1,0 +1,13 @@
+{
+  "name": "discard",
+  "version": "1.0.0",
+  "description": "Discard — locally-hosted Discord alternative",
+  "private": true,
+  "scripts": {
+    "server": "cd server && npm run dev",
+    "desktop": "cd desktop && npm run dev",
+    "mobile": "cd mobile && npx expo start",
+    "install:all": "npm i --prefix server && npm i --prefix desktop && npm i --prefix mobile",
+    "dev": "start cmd /k npm run server && start cmd /k npm run desktop"
+  }
+}
