@@ -2,6 +2,13 @@
 
 A locally-hosted Discord alternative. You self-host the server and connect with the desktop or mobile client.
 
+## Repositories
+
+| Repo | Visibility | Contents |
+|------|-----------|----------|
+| [ItsAshn/discard](https://github.com/ItsAshn/discard) | Private | Full monorepo (server + desktop + mobile + client) |
+| [ItsAshn/discard-server](https://github.com/ItsAshn/discard-server) | Public | Server only — for self-hosters |
+
 ## Projects
 
 | Directory  | Description                    | Tech                                   |
@@ -106,6 +113,24 @@ The Electron app will launch and prompt you to enter your server's URL (e.g. `ht
 - Windows: `.exe` installer (NSIS)
 - macOS: `.dmg`
 - Linux: `.AppImage`
+
+### Auto-updates
+
+The desktop app uses [`electron-updater`](https://www.electron.build/auto-update) pointed at **GitHub Releases** on the private `ItsAshn/discard` repo.
+
+**To publish an update:**
+
+1. Bump the version in `desktop/package.json`
+2. Build and publish:
+   ```bash
+   cd desktop
+   GH_TOKEN=<your_github_token> npm run dist -- --publish always
+   ```
+3. A GitHub Release is created automatically with the installer and update metadata files.
+
+When a user opens the app, it silently checks for a new release. If one is found it downloads in the background and prompts the user to restart.
+
+> A **GitHub Personal Access Token** with `repo` scope is required for publishing. Set it as `GH_TOKEN` in your environment or as a repo secret in CI.
 
 ---
 
