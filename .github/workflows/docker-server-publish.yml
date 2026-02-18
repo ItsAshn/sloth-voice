@@ -2,10 +2,6 @@ name: Publish server Docker image
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "server/**"
     tags:
       - "server-v*"
   workflow_dispatch:
@@ -38,8 +34,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # tag pushes to main as :latest
-            type=raw,value=latest,enable={{is_default_branch}}
+            # always tag the latest release as :latest
+            type=raw,value=latest
             # strip the "server-" prefix from version tags → :v1.2.3
             type=match,pattern=server-(v\d+\.\d+\.\d+.*),group=1
             # also tag the git SHA for traceability
