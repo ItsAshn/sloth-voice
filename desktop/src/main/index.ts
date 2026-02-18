@@ -25,7 +25,6 @@ interface SavedServer {
   id: string;
   name: string;
   url: string;
-  inviteCode?: string;
   icon?: string;
   addedAt: number;
 }
@@ -386,7 +385,8 @@ app.whenReady().then(() => {
       dialog.showMessageBox(mainWindow, {
         type: "info",
         title: "Update available",
-        message: "A new version of Discard is available. It will be downloaded in the background.",
+        message:
+          "A new version of Discard is available. It will be downloaded in the background.",
         buttons: ["OK"],
       });
     });

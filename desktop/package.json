@@ -1,6 +1,6 @@
 {
   "name": "discard-desktop",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Discard desktop client",
   "type": "module",
   "main": "out/main/index.js",
@@ -50,10 +50,8 @@
       "out/**/*"
     ],
     "publish": {
-      "provider": "github",
-      "owner": "ItsAshn",
-      "repo": "discard",
-      "private": true
+      "provider": "generic",
+      "url": "https://YOUR_WEBSITE/updates"
     },
     "win": {
       "target": "nsis"

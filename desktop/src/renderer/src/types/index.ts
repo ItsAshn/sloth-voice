@@ -2,7 +2,6 @@ export interface SavedServer {
   id: string;
   name: string;
   url: string;
-  inviteCode?: string;
   icon?: string;
   addedAt: number;
 }

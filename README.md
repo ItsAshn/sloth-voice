@@ -4,10 +4,10 @@ A locally-hosted Discord alternative. You self-host the server and connect with 
 
 ## Repositories
 
-| Repo | Visibility | Contents |
-|------|-----------|----------|
-| [ItsAshn/discard](https://github.com/ItsAshn/discard) | Private | Full monorepo (server + desktop + mobile + client) |
-| [ItsAshn/discard-server](https://github.com/ItsAshn/discard-server) | Public | Server only — for self-hosters |
+| Repo                                                                | Visibility | Contents                                           |
+| ------------------------------------------------------------------- | ---------- | -------------------------------------------------- |
+| [ItsAshn/discard](https://github.com/ItsAshn/discard)               | Private    | Full monorepo (server + desktop + mobile + client) |
+| [ItsAshn/discard-server](https://github.com/ItsAshn/discard-server) | Public     | Server only — for self-hosters                     |
 
 ## Projects
 
@@ -54,7 +54,8 @@ Copy or edit `server/.env`:
 SERVER_PORT=5000
 SERVER_NAME=My Discard Server
 SERVER_DESCRIPTION=A locally-hosted Discard server
-INVITE_CODE=change-this-invite-code
+# Optional: set a password to restrict registration (leave blank for open access)
+SERVER_PASSWORD=
 
 JWT_SECRET=change_this_to_a_long_random_secret
 
@@ -68,7 +69,7 @@ RTC_MAX_PORT=49999
 MEDIASOUP_LOG_LEVEL=warn
 ```
 
-> **Important:** Change `INVITE_CODE` and `JWT_SECRET` before exposing the server to a network.
+> **Important:** Set `SERVER_PASSWORD` and `JWT_SECRET` before exposing the server to a network.
 
 ---
 
@@ -171,18 +172,18 @@ This opens two terminal windows — one for the server and one for the desktop c
 
 ### `server/.env`
 
-| Variable              | Default                   | Description                          |
-| --------------------- | ------------------------- | ------------------------------------ |
-| `SERVER_PORT`         | `5000`                    | Port the server listens on           |
-| `SERVER_NAME`         | `My Discard Server`       | Name shown to clients                |
-| `SERVER_DESCRIPTION`  | _(empty)_                 | Server description                   |
-| `INVITE_CODE`         | `change-this-invite-code` | Code required to register an account |
-| `JWT_SECRET`          | _(must be set)_           | Secret used to sign auth tokens      |
-| `SERVER_DB_PATH`      | `./server.db`             | Path to the SQLite database file     |
-| `MEDIASOUP_LISTEN_IP` | `127.0.0.1`               | IP mediasoup listens on internally   |
-| `PUBLIC_ADDRESS`      | `localhost`               | Public IP/hostname for WebRTC        |
-| `RTC_MIN_PORT`        | `40000`                   | Start of UDP port range for WebRTC   |
-| `RTC_MAX_PORT`        | `49999`                   | End of UDP port range for WebRTC     |
+| Variable              | Default             | Description                                                                     |
+| --------------------- | ------------------- | ------------------------------------------------------------------------------- |
+| `SERVER_PORT`         | `5000`              | Port the server listens on                                                      |
+| `SERVER_NAME`         | `My Discard Server` | Name shown to clients                                                           |
+| `SERVER_DESCRIPTION`  | _(empty)_           | Server description                                                              |
+| `SERVER_PASSWORD`     | _(empty)_           | Optional password required to register an account (leave blank for open access) |
+| `JWT_SECRET`          | _(must be set)_     | Secret used to sign auth tokens                                                 |
+| `SERVER_DB_PATH`      | `./server.db`       | Path to the SQLite database file                                                |
+| `MEDIASOUP_LISTEN_IP` | `127.0.0.1`         | IP mediasoup listens on internally                                              |
+| `PUBLIC_ADDRESS`      | `localhost`         | Public IP/hostname for WebRTC                                                   |
+| `RTC_MIN_PORT`        | `40000`             | Start of UDP port range for WebRTC                                              |
+| `RTC_MAX_PORT`        | `49999`             | End of UDP port range for WebRTC                                                |
 
 ---
 

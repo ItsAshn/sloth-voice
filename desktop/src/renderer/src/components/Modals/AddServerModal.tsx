@@ -9,12 +9,11 @@ interface Props {
 
 export default function AddServerModal({ onClose, onAdded }: Props) {
   const [url, setUrl] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [step, setStep] = useState<"url" | "preview">("url");
   const [serverInfo, setServerInfo] = useState<{
     name: string;
     description: string;
-    inviteCode: string;
+    passwordProtected: boolean;
   } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,20 +35,11 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
 
   const handleAdd = async () => {
     if (!serverInfo) return;
-    if (
-      serverInfo.inviteCode &&
-      inviteCode &&
-      inviteCode !== serverInfo.inviteCode
-    ) {
-      setError("Invalid invite code.");
-      return;
-    }
     try {
       const newEntry: import("../../types").SavedServer = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: serverInfo.name,
         url: url.trim(),
-        inviteCode: inviteCode || undefined,
         addedAt: Date.now(),
       };
       // IPC returns the full updated SavedServer[]
@@ -87,20 +77,6 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
                 required
               />
             </div>
-            <div>
-              <label className="label-xs">
-                invite code{" "}
-                <span className="normal-case font-normal text-[10px]">
-                  (optional)
-                </span>
-              </label>
-              <input
-                className="input-field"
-                placeholder="invite-code"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-              />
-            </div>
             {error && <p className="text-danger text-xs font-mono">{error}</p>}
             <div className="flex gap-2 justify-end pt-2">
               <button type="button" onClick={onClose} className="btn-ghost">
@@ -130,6 +106,12 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
                   <p className="text-text-muted text-[10px] mt-1 font-mono">
                     {url}
                   </p>
+                  {serverInfo.passwordProtected && (
+                    <p className="text-yellow-400 text-[10px] mt-1 font-mono">
+                      🔒 password protected — you'll need the server password to
+                      register
+                    </p>
+                  )}
                 </div>
               </div>
               {error && (

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "../../store/useStore";
-import { register, login } from "../../api/server";
+import { register, login, fetchServerInfo } from "../../api/server";
 
 interface Props {
   serverId: string;
@@ -20,8 +20,16 @@ export default function AuthModal({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [serverPassword, setServerPassword] = useState("");
+  const [passwordProtected, setPasswordProtected] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchServerInfo(serverUrl)
+      .then((info) => setPasswordProtected(info.passwordProtected))
+      .catch(() => {});
+  }, [serverUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +45,7 @@ export default function AuthModal({
           username,
           password,
           displayName || username,
+          serverPassword || undefined,
         );
       }
       setSession(serverId, {
@@ -100,6 +109,25 @@ export default function AuthModal({
               required
             />
           </div>
+
+          {mode === "register" && passwordProtected && (
+            <div>
+              <label className="label-xs">
+                server password{" "}
+                <span className="normal-case font-normal text-[10px]">
+                  (required to register)
+                </span>
+              </label>
+              <input
+                className="input-field"
+                type="password"
+                value={serverPassword}
+                onChange={(e) => setServerPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          )}
 
           {error && <p className="text-danger text-xs font-mono">{error}</p>}
 

@@ -27,7 +27,8 @@ cp .env.example .env
 SERVER_PORT=5000
 SERVER_NAME=My Discard Server
 SERVER_DESCRIPTION=A locally-hosted Discard server
-INVITE_CODE=change-this-invite-code   # Users need this to register
+# Optional: set a password to restrict registration (leave blank for open access)
+SERVER_PASSWORD=
 
 JWT_SECRET=change_this_to_a_long_random_secret
 
@@ -40,7 +41,7 @@ RTC_MIN_PORT=40000
 RTC_MAX_PORT=49999
 ```
 
-> **Important:** Change `INVITE_CODE` and `JWT_SECRET` before sharing with anyone.
+> **Important:** Set `SERVER_PASSWORD` and `JWT_SECRET` before sharing with anyone.
 
 ## Run
 
@@ -66,15 +67,15 @@ Check `http://localhost:5000/health` to verify it is running.
 
 ## Environment Variables
 
-| Variable              | Default                   | Description                              |
-|-----------------------|---------------------------|------------------------------------------|
-| `SERVER_PORT`         | `5000`                    | Port the server listens on               |
-| `SERVER_NAME`         | `My Discard Server`       | Name shown to clients                    |
-| `SERVER_DESCRIPTION`  | *(empty)*                 | Server description                       |
-| `INVITE_CODE`         | `change-this-invite-code` | Code required to register an account     |
-| `JWT_SECRET`          | *(must be set)*           | Secret used to sign auth tokens          |
-| `SERVER_DB_PATH`      | `./server.db`             | Path to the SQLite database file         |
-| `MEDIASOUP_LISTEN_IP` | `127.0.0.1`               | IP mediasoup binds to internally         |
-| `PUBLIC_ADDRESS`      | `localhost`               | Public IP/hostname for WebRTC candidates |
-| `RTC_MIN_PORT`        | `40000`                   | Start of UDP port range for WebRTC       |
-| `RTC_MAX_PORT`        | `49999`                   | End of UDP port range for WebRTC         |
+| Variable              | Default             | Description                                                       |
+| --------------------- | ------------------- | ----------------------------------------------------------------- |
+| `SERVER_PORT`         | `5000`              | Port the server listens on                                        |
+| `SERVER_NAME`         | `My Discard Server` | Name shown to clients                                             |
+| `SERVER_DESCRIPTION`  | _(empty)_           | Server description                                                |
+| `SERVER_PASSWORD`     | _(empty)_           | Optional password required to register an account (open if blank) |
+| `JWT_SECRET`          | _(must be set)_     | Secret used to sign auth tokens                                   |
+| `SERVER_DB_PATH`      | `./server.db`       | Path to the SQLite database file                                  |
+| `MEDIASOUP_LISTEN_IP` | `127.0.0.1`         | IP mediasoup binds to internally                                  |
+| `PUBLIC_ADDRESS`      | `localhost`         | Public IP/hostname for WebRTC candidates                          |
+| `RTC_MIN_PORT`        | `40000`             | Start of UDP port range for WebRTC                                |
+| `RTC_MAX_PORT`        | `49999`             | End of UDP port range for WebRTC                                  |

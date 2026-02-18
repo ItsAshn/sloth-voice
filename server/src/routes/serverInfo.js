@@ -2,13 +2,16 @@
 const router = require("express").Router();
 const { requireAuth } = require("../middleware/auth");
 
-// GET /api/server/info — public info for invite preview
+// GET /api/server/info — public info shown before joining
 router.get("/info", (_req, res) => {
   return res.json({
     name: process.env.SERVER_NAME || "Discard Server",
     description:
       process.env.SERVER_DESCRIPTION || "A locally-hosted Discard server",
-    inviteCode: process.env.INVITE_CODE || null,
+    // Tell clients whether a password is required, without revealing it
+    passwordProtected: !!(
+      process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
+    ),
   });
 });
 

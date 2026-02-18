@@ -21,6 +21,7 @@ export async function register(
   username: string,
   password: string,
   display_name?: string,
+  serverPassword?: string,
 ) {
   const res = await axios.post(
     `${serverUrl.replace(/\/$/, "")}/api/auth/register`,
@@ -28,6 +29,7 @@ export async function register(
       username,
       password,
       display_name: display_name || username,
+      ...(serverPassword ? { serverPassword } : {}),
     },
   );
   return res.data as { token: string; user: User };
@@ -49,7 +51,11 @@ export async function fetchServerInfo(serverUrl: string) {
   const res = await axios.get(
     `${serverUrl.replace(/\/$/, "")}/api/server/info`,
   );
-  return res.data as { name: string; description: string; inviteCode: string };
+  return res.data as {
+    name: string;
+    description: string;
+    passwordProtected: boolean;
+  };
 }
 
 export async function fetchChannels(): Promise<Channel[]> {

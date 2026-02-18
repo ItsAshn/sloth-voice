@@ -15,9 +15,16 @@ function signToken(user) {
 
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
-  const { username, password, displayName } = req.body;
+  const { username, password, displayName, serverPassword } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });
+
+  // Enforce optional server password
+  const required =
+    process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim();
+  if (required && serverPassword !== required) {
+    return res.status(403).json({ error: "Incorrect server password" });
+  }
 
   const db = getDb();
   try {

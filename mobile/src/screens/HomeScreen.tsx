@@ -34,7 +34,6 @@ export default function HomeScreen() {
   const { savedServers, addServer, removeServer, sessions } = useStore();
   const [showAdd, setShowAdd] = useState(false);
   const [url, setUrl] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -59,11 +58,9 @@ export default function HomeScreen() {
       const saved = await addServer({
         name: info.name,
         url: url.trim(),
-        inviteCode: inviteCode || undefined,
       });
       setShowAdd(false);
       setUrl("");
-      setInviteCode("");
       nav.navigate("Auth", {
         serverId: saved.id,
         serverUrl: saved.url,
@@ -154,17 +151,6 @@ export default function HomeScreen() {
               onChangeText={setUrl}
               autoCapitalize="none"
               keyboardType="url"
-            />
-            <Text style={[styles.label, { color: C.muted }]}>
-              INVITE CODE (optional)
-            </Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.low, color: C.text }]}
-              placeholder="invite-code"
-              placeholderTextColor={C.muted}
-              value={inviteCode}
-              onChangeText={setInviteCode}
-              autoCapitalize="none"
             />
             {error ? (
               <Text style={{ color: C.danger, marginBottom: 8 }}>{error}</Text>

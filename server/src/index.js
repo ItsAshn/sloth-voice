@@ -37,7 +37,9 @@ app.get("/health", (_req, res) => {
     status: "ok",
     name: process.env.SERVER_NAME || "Discard Server",
     version: "1.0.0",
-    inviteCode: process.env.INVITE_CODE || null,
+    passwordProtected: !!(
+      process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
+    ),
   });
 });
 

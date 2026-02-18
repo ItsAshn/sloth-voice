@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { useStore } from "../store/useStore";
-import { login, register } from "../api/server";
+import { login, register, fetchServerInfo } from "../api/server";
 import type { RootStackParamList } from "../../App";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Auth">;
@@ -39,8 +39,16 @@ export default function AuthScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [serverPassword, setServerPassword] = useState("");
+  const [passwordProtected, setPasswordProtected] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchServerInfo(serverUrl)
+      .then((info) => setPasswordProtected(info.passwordProtected))
+      .catch(() => {});
+  }, [serverUrl]);
 
   const handleSubmit = async () => {
     setError("");
@@ -54,6 +62,7 @@ export default function AuthScreen() {
               username,
               password,
               displayName || username,
+              serverPassword || undefined,
             );
       setSession(serverId, {
         serverId,
@@ -120,6 +129,22 @@ export default function AuthScreen() {
           onChangeText={setPassword}
           secureTextEntry
         />
+
+        {mode === "register" && passwordProtected && (
+          <>
+            <Text style={[styles.label, { color: C.muted }]}>
+              SERVER PASSWORD
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: C.low, color: C.text }]}
+              placeholder="••••••••"
+              placeholderTextColor={C.muted}
+              value={serverPassword}
+              onChangeText={setServerPassword}
+              secureTextEntry
+            />
+          </>
+        )}
 
         {error ? (
           <Text style={{ color: C.danger, marginBottom: 12, fontSize: 13 }}>
