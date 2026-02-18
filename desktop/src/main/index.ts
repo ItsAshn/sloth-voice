@@ -7,9 +7,11 @@ import {
   Tray,
   Menu,
   nativeImage,
+  dialog,
 } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
+import { autoUpdater } from "electron-updater";
 import Store from "electron-store";
 import { io as ioClient, Socket } from "socket.io-client";
 
@@ -375,6 +377,37 @@ app.whenReady().then(() => {
 
   const mainWindow = createWindow();
   createTray(mainWindow);
+
+  // Auto-updater (only runs in packaged builds)
+  if (!is.dev) {
+    autoUpdater.checkForUpdates();
+
+    autoUpdater.on("update-available", () => {
+      dialog.showMessageBox(mainWindow, {
+        type: "info",
+        title: "Update available",
+        message: "A new version of Discard is available. It will be downloaded in the background.",
+        buttons: ["OK"],
+      });
+    });
+
+    autoUpdater.on("update-downloaded", () => {
+      dialog
+        .showMessageBox(mainWindow, {
+          type: "info",
+          title: "Update ready",
+          message: "Update downloaded. Restart Discard to apply the update.",
+          buttons: ["Restart now", "Later"],
+        })
+        .then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        });
+    });
+
+    autoUpdater.on("error", (err) => {
+      console.error("Auto-updater error:", err);
+    });
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
