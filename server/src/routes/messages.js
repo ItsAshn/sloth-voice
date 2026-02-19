@@ -100,14 +100,14 @@ router.post("/:channelId", authenticate, (req, res) => {
 });
 
 // PATCH /api/messages/:id
-router.patch("/:id", (req, res) => {
-  const { content, authorId } = req.body;
+router.patch("/:id", authenticate, (req, res) => {
+  const { content } = req.body;
   const db = getDb();
   const msg = db
     .prepare("SELECT * FROM messages WHERE id = ?")
     .get(req.params.id);
   if (!msg) return res.status(404).json({ error: "Not found" });
-  if (msg.author_id !== authorId)
+  if (msg.author_id !== req.user.id)
     return res.status(403).json({ error: "Forbidden" });
 
   db.prepare(
@@ -121,14 +121,13 @@ router.patch("/:id", (req, res) => {
 });
 
 // DELETE /api/messages/:id
-router.delete("/:id", (req, res) => {
-  const { authorId } = req.body;
+router.delete("/:id", authenticate, (req, res) => {
   const db = getDb();
   const msg = db
     .prepare("SELECT * FROM messages WHERE id = ?")
     .get(req.params.id);
   if (!msg) return res.status(404).json({ error: "Not found" });
-  if (msg.author_id !== authorId)
+  if (msg.author_id !== req.user.id)
     return res.status(403).json({ error: "Forbidden" });
 
   db.prepare("DELETE FROM messages WHERE id = ?").run(req.params.id);

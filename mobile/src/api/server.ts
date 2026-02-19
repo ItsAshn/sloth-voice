@@ -64,7 +64,7 @@ export async function fetchChannels(): Promise<Channel[]> {
 }
 
 export async function fetchMessages(channelId: string): Promise<Message[]> {
-  const res = await client().get(`/api/channels/${channelId}/messages`);
+  const res = await client().get(`/api/messages/${channelId}`);
   return res.data.messages ?? res.data;
 }
 
@@ -72,9 +72,8 @@ export async function sendMessage(
   channelId: string,
   content: string,
 ): Promise<Message> {
-  return (
-    await client().post(`/api/channels/${channelId}/messages`, { content })
-  ).data;
+  const res = await client().post(`/api/messages/${channelId}`, { content });
+  return res.data.message ?? res.data;
 }
 
 export async function fetchMembers(): Promise<Member[]> {
