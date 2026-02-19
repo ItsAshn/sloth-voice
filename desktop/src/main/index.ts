@@ -272,6 +272,26 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
+// ---------------------------------------------------------------------------
+// Single-instance lock — prevent multiple copies of the app from running
+// ---------------------------------------------------------------------------
+
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running; quit this one immediately.
+  app.quit();
+} else {
+  // When a second launch is attempted, focus the existing window.
+  app.on("second-instance", () => {
+    const wins = BrowserWindow.getAllWindows();
+    const win = wins.length > 0 ? wins[0] : createWindow();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.discard.desktop");
 
