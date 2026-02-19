@@ -201,6 +201,7 @@ function showNotification(server: string, title: string, body: string): void {
 // ---------------------------------------------------------------------------
 
 let tray: Tray | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 function createTray(win: BrowserWindow): void {
   // Use a blank 1×1 image as default; replace with your icon asset if available
@@ -284,11 +285,10 @@ if (!gotTheLock) {
 } else {
   // When a second launch is attempted, focus the existing window.
   app.on("second-instance", () => {
-    const wins = BrowserWindow.getAllWindows();
-    const win = wins.length > 0 ? wins[0] : createWindow();
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
 }
 
@@ -395,7 +395,7 @@ app.whenReady().then(() => {
   ipcMain.handle("app:version", () => app.getVersion());
   ipcMain.handle("open-external", (_e, url: string) => shell.openExternal(url));
 
-  const mainWindow = createWindow();
+  mainWindow = createWindow();
   createTray(mainWindow);
 
   // Auto-updater (only runs in packaged builds)
