@@ -15,7 +15,8 @@ function getAtQuery(text: string, cursor: number): string | null {
 }
 
 export default function MessageInput({ channelId, channelName }: Props) {
-  const { activeServer, sessions, members, addMessage } = useStore();
+  const { activeServer, sessions, members, addMessage, clearSession } =
+    useStore();
   const session = activeServer ? sessions[activeServer.id] : undefined;
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
@@ -70,9 +71,13 @@ export default function MessageInput({ channelId, channelName }: Props) {
         ?.status;
       const message = (err as { response?: { data?: { error?: string } } })
         ?.response?.data?.error;
-      if (status === 403) {
+      if (status === 401) {
+        // Token expired or invalid — clear the session so AuthModal is shown
+        if (activeServer) clearSession(activeServer.id);
+      } else if (status === 403) {
         setSendError(message ?? "you do not have permission to send messages");
       } else {
+        setSendError("failed to send message. try again.");
         console.error(err);
       }
     } finally {

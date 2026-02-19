@@ -69,6 +69,7 @@ export async function getMe(serverUrl: string, token: string): Promise<User> {
 export async function fetchServerInfo(serverUrl: string) {
   const res = await axios.get(
     `${serverUrl.replace(/\/$/, "")}/api/server/info`,
+    { timeout: 8000 },
   );
   return res.data as {
     name: string;
