@@ -105,7 +105,34 @@ function runMigrations(database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      code TEXT PRIMARY KEY,
+      created_by TEXT NOT NULL,
+      max_uses INTEGER DEFAULT NULL,       -- NULL = unlimited
+      uses INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER DEFAULT NULL,     -- NULL = never expires (unix seconds)
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#5865f2',
+      permissions TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER DEFAULT (unixepoch())
+    );
   `);
+
+  // Add custom_role_id column to server_members — idempotent
+  try {
+    database.exec(
+      `ALTER TABLE server_members ADD COLUMN custom_role_id TEXT DEFAULT NULL REFERENCES roles(id)`,
+    );
+  } catch {
+    // column already exists — safe to ignore
+  }
 }
 
 module.exports = { getDb, initDb };

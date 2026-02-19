@@ -39,6 +39,24 @@ export interface Member {
   display_name: string;
   avatar?: string;
   role?: "admin" | "member";
+  custom_role_id?: string | null;
+  custom_role_name?: string | null;
+  custom_role_color?: string | null;
+}
+
+export type Permission =
+  | "send_messages"
+  | "manage_channels"
+  | "delete_messages"
+  | "kick_members"
+  | "manage_invites";
+
+export interface CustomRole {
+  id: string;
+  name: string;
+  color: string;
+  permissions: Partial<Record<Permission, boolean>>;
+  created_at?: number;
 }
 
 export interface VoicePeer {
@@ -47,6 +65,16 @@ export interface VoicePeer {
   username: string;
   speaking: boolean;
   muted: boolean;
+  connectionQuality?: "good" | "fair" | "poor";
+}
+
+export interface InviteCode {
+  code: string;
+  created_by?: string;
+  max_uses: number | null;
+  uses: number;
+  expires_at: number | null; // unix seconds
+  created_at?: number;
 }
 
 export interface ServerSession {

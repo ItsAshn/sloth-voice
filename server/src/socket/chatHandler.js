@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const { getDb } = require("../db/database");
+const { getUserPermissions, hasPermission } = require("../middleware/auth");
 
 // Room name for sockets that want server-wide push notifications
 const NOTIFICATION_ROOM = "__notifications__";
@@ -138,6 +139,16 @@ function registerChatHandlers(io, socket) {
     "message:send",
     ({ channelId, content, authorId, authorUsername }) => {
       if (!channelId || !content?.trim() || !authorId) return;
+
+      // Enforce send_messages permission
+      const userInfo = getUserPermissions(authorId);
+      if (!hasPermission(userInfo, "send_messages")) {
+        socket.emit("error", {
+          code: "FORBIDDEN",
+          message: "You do not have permission to send messages",
+        });
+        return;
+      }
 
       const db = getDb();
       const id = uuidv4();

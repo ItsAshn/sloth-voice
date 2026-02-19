@@ -18,6 +18,43 @@ const LOCAL_SPEAKING_THRESHOLD = 8;
  */
 const REMOTE_SPEAKING_THRESHOLD = 15;
 const SPEAKING_POLL_MS = 80;
+/** How long to hold the "speaking" state after silence before turning it off. */
+const SPEAKING_HOLD_MS = 600;
+const QUALITY_POLL_MS = 3000;
+
+/** Derive a quality rating from an RTCStatsReport. */
+function computeQualityFromStats(
+  report: RTCStatsReport,
+): "good" | "fair" | "poor" {
+  let rttMs = 0;
+  let jitterMs = 0;
+  let lossRate = 0;
+  report.forEach((stat: RTCStats & Record<string, unknown>) => {
+    if (
+      stat.type === "candidate-pair" &&
+      (stat as any).state === "succeeded" &&
+      (stat as any).currentRoundTripTime != null
+    ) {
+      rttMs = ((stat as any).currentRoundTripTime as number) * 1000;
+    }
+    if (stat.type === "inbound-rtp" && (stat as any).kind === "audio") {
+      jitterMs = ((stat as any).jitter ?? 0) * 1000;
+      const received = (stat as any).packetsReceived ?? 0;
+      const lost = (stat as any).packetsLost ?? 0;
+      const total = received + lost;
+      lossRate = total > 0 ? (lost / total) * 100 : 0;
+    }
+    if (stat.type === "remote-inbound-rtp" && (stat as any).kind === "audio") {
+      if ((stat as any).roundTripTime != null)
+        rttMs = ((stat as any).roundTripTime as number) * 1000;
+      const lostFrac = (stat as any).fractionLost ?? 0;
+      lossRate = Math.max(lossRate, lostFrac * 100);
+    }
+  });
+  if (rttMs > 300 || jitterMs > 50 || lossRate > 8) return "poor";
+  if (rttMs > 150 || jitterMs > 25 || lossRate > 3) return "fair";
+  return "good";
+}
 
 function startSpeakingDetection(
   stream: MediaStream,
@@ -37,6 +74,7 @@ function startSpeakingDetection(
   let speaking = false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
   const poll = () => {
     if (stopped) return;
@@ -61,9 +99,23 @@ function startSpeakingDetection(
     }
     const rms = Math.sqrt(squareSum / buf.length);
     const nowSpeaking = rms > LOCAL_SPEAKING_THRESHOLD;
-    if (nowSpeaking !== speaking) {
-      speaking = nowSpeaking;
-      onSpeaking(speaking);
+    if (nowSpeaking) {
+      // Cancel any pending hold-off — we're still speaking
+      if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (!speaking) {
+        speaking = true;
+        onSpeaking(true);
+      }
+    } else if (speaking && holdTimer === null) {
+      // Silence detected — hold the speaking state open briefly before clearing
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        speaking = false;
+        onSpeaking(false);
+      }, SPEAKING_HOLD_MS);
     }
     timer = setTimeout(poll, SPEAKING_POLL_MS);
   };
@@ -74,6 +126,7 @@ function startSpeakingDetection(
   return () => {
     stopped = true;
     if (timer !== null) clearTimeout(timer);
+    if (holdTimer !== null) clearTimeout(holdTimer);
     source.disconnect();
     ctx.close();
     // Stop cloned tracks so they don't linger
@@ -96,6 +149,7 @@ function startRemoteSpeakingDetection(
   let speaking = false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
   const poll = () => {
     if (stopped) return;
@@ -113,9 +167,21 @@ function startRemoteSpeakingDetection(
     analyser.getByteFrequencyData(buf);
     const rms = buf.reduce((a, b) => a + b, 0) / buf.length;
     const nowSpeaking = rms > REMOTE_SPEAKING_THRESHOLD;
-    if (nowSpeaking !== speaking) {
-      speaking = nowSpeaking;
-      onSpeaking(speaking);
+    if (nowSpeaking) {
+      if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (!speaking) {
+        speaking = true;
+        onSpeaking(true);
+      }
+    } else if (speaking && holdTimer === null) {
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        speaking = false;
+        onSpeaking(false);
+      }, SPEAKING_HOLD_MS);
     }
     timer = setTimeout(poll, SPEAKING_POLL_MS);
   };
@@ -125,6 +191,7 @@ function startRemoteSpeakingDetection(
   return () => {
     stopped = true;
     if (timer !== null) clearTimeout(timer);
+    if (holdTimer !== null) clearTimeout(holdTimer);
     source.disconnect();
     ctx.close();
   };
@@ -136,9 +203,16 @@ export function useVoice() {
   const recvTransportRef = useRef<MsTypes.Transport | null>(null);
   const producerRef = useRef<MsTypes.Producer | null>(null);
   const consumersRef = useRef<Map<string, MsTypes.Consumer>>(new Map());
+  const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const channelIdRef = useRef<string | null>(null);
   const localSpeakingCleanupRef = useRef<(() => void) | null>(null);
   const remoteSpeakingCleanupsRef = useRef<Map<string, () => void>>(new Map());
+  const qualityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+  const peerQualityIntervalsRef = useRef<
+    Map<string, ReturnType<typeof setInterval>>
+  >(new Map());
 
   const {
     addVoicePeer,
@@ -148,6 +222,7 @@ export function useVoice() {
     localMuted,
     setLocalMuted,
     setLocalSpeaking,
+    setLocalConnectionQuality,
     audioBitrateKbps,
     setAudioBitrateKbps,
     audioInputDeviceId,
@@ -239,8 +314,74 @@ export function useVoice() {
         );
       });
 
-      // 5. Get mic and produce (this triggers voice:newPeer on the server side
-      //    so existing peers learn about us only once we are actually sending)
+      // 5. Register peer event listeners BEFORE producing so we never miss
+      //    a voice:newPeer event that arrives while we are in the mic/produce
+      //    async chain below.
+      socket.on(
+        "voice:newPeer",
+        async (peer: { peerId: string; userId: string; username: string }) => {
+          await consumePeer(
+            socket,
+            device,
+            recvTransport,
+            peer.peerId,
+            channelId,
+          );
+          addVoicePeer({
+            id: peer.peerId,
+            userId: peer.userId,
+            username: peer.username,
+            speaking: false,
+            muted: false,
+          });
+        },
+      );
+
+      socket.on("voice:peerLeft", ({ peerId }: { peerId: string }) => {
+        consumersRef.current.get(peerId)?.close();
+        consumersRef.current.delete(peerId);
+        const leavingEl = audioElemsRef.current.get(peerId);
+        if (leavingEl) {
+          leavingEl.pause();
+          leavingEl.srcObject = null;
+        }
+        audioElemsRef.current.delete(peerId);
+        remoteSpeakingCleanupsRef.current.get(peerId)?.();
+        remoteSpeakingCleanupsRef.current.delete(peerId);
+        const peerQInt = peerQualityIntervalsRef.current.get(peerId);
+        if (peerQInt != null) clearInterval(peerQInt);
+        peerQualityIntervalsRef.current.delete(peerId);
+        removeVoicePeer(peerId);
+      });
+
+      // Server-authoritative speaking indicators
+      socket.on(
+        "voice:peerSpeaking",
+        ({ peerId, speaking }: { peerId: string; speaking: boolean }) => {
+          updateVoicePeer(peerId, { speaking });
+        },
+      );
+
+      // 6. Consume peers that were already producing when we joined
+      for (const peer of joinResult.peers) {
+        await consumePeer(
+          socket,
+          device,
+          recvTransport,
+          peer.peerId,
+          channelId,
+        );
+        addVoicePeer({
+          id: peer.peerId,
+          userId: peer.userId,
+          username: peer.username,
+          speaking: false,
+          muted: false,
+        });
+      }
+
+      // 7. Get mic and produce — triggers voice:newPeer on other clients;
+      //    listeners above are already registered so nothing is missed.
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: audioInputDeviceId
@@ -268,58 +409,30 @@ export function useVoice() {
         console.error("Mic access denied", err);
       }
 
-      // 6. Consume peers that were already producing when we joined
-      for (const peer of joinResult.peers) {
-        await consumePeer(
-          socket,
-          device,
-          recvTransport,
-          peer.peerId,
-          channelId,
-        );
-        addVoicePeer({
-          id: peer.peerId,
-          userId: peer.userId,
-          username: peer.username,
-          speaking: false,
-          muted: false,
-        });
-      }
-
-      // 7. Listen for peers that start producing after we joined
-      socket.on(
-        "voice:newPeer",
-        async (peer: { peerId: string; userId: string; username: string }) => {
-          await consumePeer(
-            socket,
-            device,
-            recvTransport,
-            peer.peerId,
-            channelId,
-          );
-          addVoicePeer({
-            id: peer.peerId,
-            userId: peer.userId,
-            username: peer.username,
-            speaking: false,
-            muted: false,
-          });
-        },
+      // Start polling local connection quality — fire immediately then repeat
+      if (qualityIntervalRef.current != null)
+        clearInterval(qualityIntervalRef.current);
+      const pollLocalQuality = async () => {
+        if (!sendTransportRef.current) return;
+        try {
+          const stats = await sendTransportRef.current.getStats();
+          setLocalConnectionQuality(computeQualityFromStats(stats));
+        } catch {
+          // ignore transient errors
+        }
+      };
+      pollLocalQuality();
+      qualityIntervalRef.current = setInterval(
+        pollLocalQuality,
+        QUALITY_POLL_MS,
       );
-
-      socket.on("voice:peerLeft", ({ peerId }: { peerId: string }) => {
-        consumersRef.current.get(peerId)?.close();
-        consumersRef.current.delete(peerId);
-        remoteSpeakingCleanupsRef.current.get(peerId)?.();
-        remoteSpeakingCleanupsRef.current.delete(peerId);
-        removeVoicePeer(peerId);
-      });
     },
     [
       addVoicePeer,
       removeVoicePeer,
       updateVoicePeer,
       setLocalSpeaking,
+      setLocalConnectionQuality,
       audioBitrateKbps,
       audioInputDeviceId,
       audioOutputDeviceId,
@@ -346,23 +459,8 @@ export function useVoice() {
     }
     const consumer = await recvTransport.consume(params);
     consumersRef.current.set(peerId, consumer);
-    const audioEl = new Audio();
-    audioEl.srcObject = new MediaStream([consumer.track]);
-    if (
-      audioOutputDeviceId &&
-      typeof (audioEl as any).setSinkId === "function"
-    ) {
-      (audioEl as any).setSinkId(audioOutputDeviceId).catch(console.error);
-    }
-    audioEl.play().catch(console.error);
 
-    // Start remote speaking detection
-    const cleanupRemote = startRemoteSpeakingDetection(
-      consumer.track,
-      (speaking) => updateVoicePeer(peerId, { speaking }),
-    );
-    remoteSpeakingCleanupsRef.current.set(peerId, cleanupRemote);
-
+    // Resume server-side consumer so RTP starts flowing
     await new Promise<void>((resolve) =>
       socket.emit(
         "voice:resumeConsumer",
@@ -370,10 +468,64 @@ export function useVoice() {
         resolve,
       ),
     );
+    // Also resume the client-side consumer — mediasoup-client creates it
+    // paused (mirroring the server's paused:true) so the track is silent
+    // until this is called, regardless of what the server does.
+    await consumer.resume();
+
+    // Route audio through HTMLAudioElement (reliable hardware output in Electron).
+    const audioEl = new Audio();
+    audioEl.autoplay = true;
+    audioEl.srcObject = new MediaStream([consumer.track]);
+    if (audioOutputDeviceId) {
+      try {
+        await (
+          audioEl as HTMLAudioElement & { setSinkId(id: string): Promise<void> }
+        ).setSinkId(audioOutputDeviceId);
+      } catch {
+        /* setSinkId not supported or device unavailable — use default */
+      }
+    }
+    await audioEl.play().catch(() => {
+      /* autoplay policy — element will play when context allows */
+    });
+    audioElemsRef.current.set(peerId, audioEl);
+
+    // Start remote speaking detection (shares the same track)
+    const cleanupRemote = startRemoteSpeakingDetection(
+      consumer.track,
+      (speaking) => updateVoicePeer(peerId, { speaking }),
+    );
+    remoteSpeakingCleanupsRef.current.set(peerId, cleanupRemote);
+
+    // Poll per-peer connection quality — fire immediately then repeat
+    const pollPeerQuality = async () => {
+      const c = consumersRef.current.get(peerId);
+      if (!c) return;
+      try {
+        const stats = await c.getStats();
+        updateVoicePeer(peerId, {
+          connectionQuality: computeQualityFromStats(stats),
+        });
+      } catch {
+        // ignore
+      }
+    };
+    pollPeerQuality();
+    const peerQInt = setInterval(pollPeerQuality, QUALITY_POLL_MS);
+    peerQualityIntervalsRef.current.set(peerId, peerQInt);
   };
 
   const leaveVoice = useCallback(
     (socket?: Socket) => {
+      if (qualityIntervalRef.current != null) {
+        clearInterval(qualityIntervalRef.current);
+        qualityIntervalRef.current = null;
+      }
+      peerQualityIntervalsRef.current.forEach((interval) =>
+        clearInterval(interval),
+      );
+      peerQualityIntervalsRef.current.clear();
       localSpeakingCleanupRef.current?.();
       localSpeakingCleanupRef.current = null;
       remoteSpeakingCleanupsRef.current.forEach((cleanup) => cleanup());
@@ -382,6 +534,11 @@ export function useVoice() {
       producerRef.current = null;
       consumersRef.current.forEach((c) => c.close());
       consumersRef.current.clear();
+      audioElemsRef.current.forEach((el) => {
+        el.pause();
+        el.srcObject = null;
+      });
+      audioElemsRef.current.clear();
       sendTransportRef.current?.close();
       recvTransportRef.current?.close();
       sendTransportRef.current = null;
@@ -389,11 +546,12 @@ export function useVoice() {
       deviceRef.current = null;
       setVoicePeers([]);
       setLocalSpeaking(false);
+      setLocalConnectionQuality(null);
       if (socket)
         socket.emit("voice:leave", { channelId: channelIdRef.current });
       channelIdRef.current = null;
     },
-    [setVoicePeers, setLocalSpeaking],
+    [setVoicePeers, setLocalSpeaking, setLocalConnectionQuality],
   );
 
   const toggleMute = useCallback(() => {

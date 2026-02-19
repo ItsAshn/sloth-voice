@@ -6,7 +6,6 @@ let worker = null;
 async function createWorker() {
   worker = await mediasoup.createWorker({
     logLevel: process.env.MEDIASOUP_LOG_LEVEL || "warn",
-    logTags: ["info", "ice", "dtls", "rtp", "srtp", "rtcp"],
     rtcMinPort: parseInt(process.env.RTC_MIN_PORT || "40000", 10),
     rtcMaxPort: parseInt(process.env.RTC_MAX_PORT || "49999", 10),
   });

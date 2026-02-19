@@ -1,5 +1,13 @@
 import axios from "axios";
-import type { User, Channel, Message, Member } from "../types";
+import type {
+  User,
+  Channel,
+  Message,
+  Member,
+  InviteCode,
+  CustomRole,
+  Permission,
+} from "../types";
 
 let _baseUrl = "";
 let _token = "";
@@ -134,4 +142,77 @@ export async function updateServerSettings(
 ): Promise<{ name: string }> {
   const res = await client().patch("/api/server/settings", { name });
   return res.data;
+}
+
+// Invite codes (admin)
+export async function createInvite(
+  maxUses?: number,
+  expiresInHours?: number,
+): Promise<InviteCode> {
+  const res = await client().post("/api/server/invites", {
+    maxUses: maxUses || null,
+    expiresInHours: expiresInHours || null,
+  });
+  return res.data;
+}
+
+export async function fetchInvites(): Promise<InviteCode[]> {
+  const res = await client().get("/api/server/invites");
+  return res.data.invites ?? res.data;
+}
+
+export async function revokeInvite(code: string): Promise<void> {
+  await client().delete(`/api/server/invites/${code}`);
+}
+
+// Member management (admin)
+export async function setMemberRole(
+  userId: string,
+  role: "admin" | "member",
+): Promise<void> {
+  await client().patch(`/api/server/members/${userId}/role`, { role });
+}
+
+export async function kickMember(userId: string): Promise<void> {
+  await client().delete(`/api/server/members/${userId}`);
+}
+
+export async function assignCustomRole(
+  userId: string,
+  roleId: string | null,
+): Promise<void> {
+  await client().patch(`/api/server/members/${userId}/custom-role`, { roleId });
+}
+
+// Custom roles (admin)
+export async function fetchRoles(): Promise<CustomRole[]> {
+  const res = await client().get("/api/roles");
+  return res.data.roles ?? res.data;
+}
+
+export async function createRole(
+  name: string,
+  color: string,
+  permissions: Partial<Record<Permission, boolean>>,
+): Promise<CustomRole> {
+  const res = await client().post("/api/roles", { name, color, permissions });
+  return res.data.role ?? res.data;
+}
+
+export async function updateRole(
+  id: string,
+  name: string,
+  color: string,
+  permissions: Partial<Record<Permission, boolean>>,
+): Promise<CustomRole> {
+  const res = await client().patch(`/api/roles/${id}`, {
+    name,
+    color,
+    permissions,
+  });
+  return res.data.role ?? res.data;
+}
+
+export async function deleteRole(id: string): Promise<void> {
+  await client().delete(`/api/roles/${id}`);
 }

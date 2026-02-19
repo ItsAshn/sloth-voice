@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth");
 const channelRoutes = require("./routes/channels");
 const messageRoutes = require("./routes/messages");
 const serverInfoRoutes = require("./routes/serverInfo");
+const roleRoutes = require("./routes/roles");
 const { registerChatHandlers } = require("./socket/chatHandler");
 const { registerVoiceHandlers } = require("./socket/voiceHandler");
 
@@ -31,6 +32,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/channels", channelRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/server", serverInfoRoutes);
+app.use("/api/roles", roleRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({

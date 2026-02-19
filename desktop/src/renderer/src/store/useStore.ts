@@ -62,6 +62,8 @@ interface StoreState {
   setLocalMuted: (muted: boolean) => void;
   localSpeaking: boolean;
   setLocalSpeaking: (speaking: boolean) => void;
+  localConnectionQuality: "good" | "fair" | "poor" | null;
+  setLocalConnectionQuality: (quality: "good" | "fair" | "poor" | null) => void;
   /** Client-preferred audio bitrate in kbps (e.g. 32, 64, 96, 128) */
   audioBitrateKbps: number;
   setAudioBitrateKbps: (kbps: number) => void;
@@ -172,6 +174,9 @@ export const useStore = create<StoreState>()(
       setLocalMuted: (muted) => set({ localMuted: muted }),
       localSpeaking: false,
       setLocalSpeaking: (speaking) => set({ localSpeaking: speaking }),
+      localConnectionQuality: null,
+      setLocalConnectionQuality: (quality) =>
+        set({ localConnectionQuality: quality }),
       audioBitrateKbps: 64,
       setAudioBitrateKbps: (kbps) => set({ audioBitrateKbps: kbps }),
       audioInputDeviceId: null,

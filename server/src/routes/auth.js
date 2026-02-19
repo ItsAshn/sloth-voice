@@ -179,9 +179,13 @@ router.get("/users", (req, res) => {
   const users = db
     .prepare(
       `SELECT u.id, u.username, u.display_name, u.avatar,
-              COALESCE(m.role, 'member') as role
+              COALESCE(m.role, 'member') as role,
+              m.custom_role_id,
+              r.name  AS custom_role_name,
+              r.color AS custom_role_color
        FROM users u
        LEFT JOIN server_members m ON m.user_id = u.id
+       LEFT JOIN roles r ON r.id = m.custom_role_id
        ORDER BY u.username`,
     )
     .all();

@@ -1,7 +1,12 @@
 // Server info + invite system (no relay needed)
 const router = require("express").Router();
-const { requireAuth, requireAdmin } = require("../middleware/auth");
+const {
+  requireAuth,
+  requireAdmin,
+  requirePermission,
+} = require("../middleware/auth");
 const { getDb } = require("../db/database");
+const { v4: uuidv4 } = require("uuid");
 
 // GET /api/server/info — public info shown before joining
 router.get("/info", (_req, res) => {
@@ -50,5 +55,207 @@ router.post("/announce", requireAuth, (req, res) => {
   io.to("__notifications__").emit("server:announce", { title, body });
   return res.json({ ok: true });
 });
+
+// ─── Invite codes ────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/server/invites   (admin only)
+ * Body: { maxUses?: number, expiresInHours?: number }
+ * Returns the full invite object including the code.
+ */
+router.post(
+  "/invites",
+  requireAuth,
+  requirePermission("manage_invites"),
+  (req, res) => {
+    const { maxUses, expiresInHours } = req.body;
+    const db = getDb();
+
+    // Generate a short 8-char alphanumeric code
+    const code = uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase();
+    const expiresAt =
+      expiresInHours && expiresInHours > 0
+        ? Math.floor(Date.now() / 1000) + Math.round(expiresInHours * 3600)
+        : null;
+    const max = maxUses && maxUses > 0 ? Math.round(maxUses) : null;
+
+    db.prepare(
+      "INSERT INTO invite_codes (code, created_by, max_uses, expires_at) VALUES (?, ?, ?, ?)",
+    ).run(code, req.user.id, max, expiresAt);
+
+    return res.status(201).json({ code, maxUses: max, expiresAt, uses: 0 });
+  },
+);
+
+/**
+ * GET /api/server/invites   (admin only)
+ * Returns all non-expired, non-exhausted invite codes.
+ */
+router.get(
+  "/invites",
+  requireAuth,
+  requirePermission("manage_invites"),
+  (req, res) => {
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    const rows = db
+      .prepare(
+        `SELECT code, created_by, max_uses, uses, expires_at, created_at
+       FROM invite_codes
+       WHERE (expires_at IS NULL OR expires_at > ?)
+         AND (max_uses IS NULL OR uses < max_uses)
+       ORDER BY created_at DESC`,
+      )
+      .all(now);
+    return res.json({ invites: rows });
+  },
+);
+
+/**
+ * DELETE /api/server/invites/:code   (admin only)
+ * Revokes an invite code immediately.
+ */
+router.delete(
+  "/invites/:code",
+  requireAuth,
+  requirePermission("manage_invites"),
+  (req, res) => {
+    const db = getDb();
+    db.prepare("DELETE FROM invite_codes WHERE code = ?").run(
+      req.params.code.toUpperCase(),
+    );
+    return res.json({ ok: true });
+  },
+);
+
+/**
+ * POST /api/server/join/:code   (requires auth — existing account joins via invite)
+ * If the user already has a server_members record this is a no-op.
+ * Returns { ok: true, alreadyMember: bool }.
+ */
+router.post("/join/:code", requireAuth, (req, res) => {
+  const db = getDb();
+  const now = Math.floor(Date.now() / 1000);
+  const code = req.params.code.toUpperCase();
+
+  const invite = db
+    .prepare(
+      `SELECT * FROM invite_codes
+       WHERE code = ?
+         AND (expires_at IS NULL OR expires_at > ?)
+         AND (max_uses IS NULL OR uses < max_uses)`,
+    )
+    .get(code, now);
+
+  if (!invite) {
+    return res
+      .status(404)
+      .json({ error: "Invite code is invalid, expired, or exhausted" });
+  }
+
+  const existing = db
+    .prepare("SELECT 1 FROM server_members WHERE user_id = ?")
+    .get(req.user.id);
+
+  if (!existing) {
+    db.prepare("INSERT INTO server_members (user_id, role) VALUES (?, ?)").run(
+      req.user.id,
+      "member",
+    );
+  }
+
+  // Increment usage counter
+  db.prepare("UPDATE invite_codes SET uses = uses + 1 WHERE code = ?").run(
+    code,
+  );
+
+  return res.json({ ok: true, alreadyMember: !!existing });
+});
+
+// ─── Member management ───────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/server/members/:userId/role   (admin only)
+ * Body: { role: 'admin' | 'member' }
+ * Promotes or demotes a user.
+ */
+router.patch("/members/:userId/role", requireAuth, requireAdmin, (req, res) => {
+  const { role } = req.body;
+  if (!["admin", "member"].includes(role)) {
+    return res.status(400).json({ error: "role must be 'admin' or 'member'" });
+  }
+  const db = getDb();
+  const target = db
+    .prepare("SELECT 1 FROM server_members WHERE user_id = ?")
+    .get(req.params.userId);
+  if (!target) {
+    return res.status(404).json({ error: "Member not found" });
+  }
+  db.prepare("UPDATE server_members SET role = ? WHERE user_id = ?").run(
+    role,
+    req.params.userId,
+  );
+  return res.json({ ok: true, userId: req.params.userId, role });
+});
+
+/**
+ * DELETE /api/server/members/:userId   (admin only)
+ * Kicks a user: removes their server_members row (they can still log in, just not be listed).
+ * Admins cannot kick themselves.
+ */
+router.delete(
+  "/members/:userId",
+  requireAuth,
+  requirePermission("kick_members"),
+  (req, res) => {
+    if (req.params.userId === req.user.id) {
+      return res.status(400).json({ error: "You cannot kick yourself" });
+    }
+    const db = getDb();
+    db.prepare("DELETE FROM server_members WHERE user_id = ?").run(
+      req.params.userId,
+    );
+    return res.json({ ok: true });
+  },
+);
+
+/**
+ * PATCH /api/server/members/:userId/custom-role   (admin only)
+ * Body: { roleId: string | null }  — null to unassign
+ * Assigns or removes a custom role from a member.
+ */
+router.patch(
+  "/members/:userId/custom-role",
+  requireAuth,
+  requireAdmin,
+  (req, res) => {
+    const { roleId } = req.body;
+    const db = getDb();
+
+    const target = db
+      .prepare("SELECT 1 FROM server_members WHERE user_id = ?")
+      .get(req.params.userId);
+    if (!target) {
+      return res.status(404).json({ error: "Member not found" });
+    }
+
+    if (roleId !== null && roleId !== undefined) {
+      const role = db.prepare("SELECT 1 FROM roles WHERE id = ?").get(roleId);
+      if (!role) {
+        return res.status(404).json({ error: "Role not found" });
+      }
+    }
+
+    db.prepare(
+      "UPDATE server_members SET custom_role_id = ? WHERE user_id = ?",
+    ).run(roleId ?? null, req.params.userId);
+
+    return res.json({
+      ok: true,
+      userId: req.params.userId,
+      roleId: roleId ?? null,
+    });
+  },
+);
 
 module.exports = router;

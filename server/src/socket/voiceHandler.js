@@ -13,7 +13,7 @@
  *  voice:consume { channelId, peerId, rtpCapabilities }  callback(ConsumerOptions)
  *  voice:resumeConsumer { channelId, consumerId }        callback()
  *  voice:leave { channelId }
- *  voice:speaking { channelId, speaking }                (server logs)
+ *  voice:speaking { channelId, speaking }                broadcasts voice:peerSpeaking to other peers
  *  voice:setBitrate { channelId, transportId, maxBitrateKbps }
  *
  *  Server → Client events:
@@ -109,8 +109,8 @@ function registerVoiceHandlers(io, socket) {
         const transport = await room.router.createWebRtcTransport({
           listenIps: [
             {
-              ip: process.env.MEDIASOUP_LISTEN_IP || "127.0.0.1",
-              announcedIp: process.env.PUBLIC_ADDRESS || undefined,
+              ip: "0.0.0.0",
+              announcedIp: process.env.PUBLIC_ADDRESS || "127.0.0.1",
             },
           ],
           enableUdp: true,
@@ -126,7 +126,12 @@ function registerVoiceHandlers(io, socket) {
         if (peer) peer.transports.set(transport.id, transport);
 
         transport.on("dtlsstatechange", (state) => {
-          if (state === "closed") transport.close();
+          if (state === "failed" || state === "closed") {
+            console.warn(
+              `[voice] transport dtls=${state} | dir=${direction} | peer=${socket.id}`,
+            );
+            transport.close();
+          }
         });
 
         callback({
@@ -260,6 +265,8 @@ function registerVoiceHandlers(io, socket) {
           producerId,
           kind: consumer.kind,
           rtpParameters: consumer.rtpParameters,
+          // Pass paused state so client knows to call consumer.resume()
+          paused: consumer.producerPaused,
         });
       } catch (err) {
         console.error("voice:consume error", err);
@@ -276,7 +283,14 @@ function registerVoiceHandlers(io, socket) {
         const room = voiceRooms.get(channelId);
         const peer = room?.peers.get(socket.id);
         const consumer = peer?.consumers.get(consumerId);
-        if (consumer) await consumer.resume();
+        if (!consumer) {
+          console.warn(
+            `[voice] resumeConsumer: consumer not found | id=${consumerId}`,
+          );
+          if (typeof callback === "function") callback();
+          return;
+        }
+        await consumer.resume();
         if (typeof callback === "function") callback();
       } catch (err) {
         console.error("voice:resumeConsumer error", err.message);
@@ -286,8 +300,18 @@ function registerVoiceHandlers(io, socket) {
   );
 
   // ── Speaking indicator (VAD telemetry) ───────────────────────────────────
-  socket.on("voice:speaking", () => {
-    // no-op: event handled client-side only
+  socket.on("voice:speaking", ({ channelId, speaking }) => {
+    const room = voiceRooms.get(channelId);
+    if (!room) return;
+    // Broadcast to all other peers in the room so their speaking indicator lights up
+    for (const [sid] of room.peers) {
+      if (sid !== socket.id) {
+        socket.to(sid).emit("voice:peerSpeaking", {
+          peerId: socket.id,
+          speaking,
+        });
+      }
+    }
   });
 
   // ── Set outgoing bitrate cap ─────────────────────────────────────────────

@@ -1,22 +1,12 @@
 const router = require("express").Router();
 const { v4: uuidv4 } = require("uuid");
-const jwt = require("jsonwebtoken");
 const { getDb } = require("../db/database");
 const { parseMentions, processMentions } = require("../socket/chatHandler");
-
-const JWT_SECRET = process.env.JWT_SECRET || "discard_server_secret_change_me";
-
-function authenticate(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-}
+const {
+  requireAuth,
+  requirePermission,
+  hasPermission,
+} = require("../middleware/auth");
 
 // Map DB row to client-friendly format
 function mapMessage(row) {
@@ -69,38 +59,49 @@ router.get("/:channelId", (req, res) => {
 });
 
 // POST /api/messages/:channelId
-router.post("/:channelId", authenticate, (req, res) => {
-  const { content } = req.body;
-  if (!content?.trim())
-    return res.status(400).json({ error: "content required" });
+router.post(
+  "/:channelId",
+  requireAuth,
+  requirePermission("send_messages"),
+  (req, res) => {
+    const { content } = req.body;
+    if (!content?.trim())
+      return res.status(400).json({ error: "content required" });
 
-  const db = getDb();
-  // Fetch display_name from users table
-  const userRow = db
-    .prepare("SELECT id, username, display_name FROM users WHERE id = ?")
-    .get(req.user.id);
-  if (!userRow) return res.status(401).json({ error: "User not found" });
+    const db = getDb();
+    // Fetch display_name from users table
+    const userRow = db
+      .prepare("SELECT id, username, display_name FROM users WHERE id = ?")
+      .get(req.user.id);
+    if (!userRow) return res.status(401).json({ error: "User not found" });
 
-  const id = uuidv4();
-  db.prepare(
-    `INSERT INTO messages (id, channel_id, author_id, author_username, content)
+    const id = uuidv4();
+    db.prepare(
+      `INSERT INTO messages (id, channel_id, author_id, author_username, content)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, req.params.channelId, userRow.id, userRow.username, content.trim());
+    ).run(
+      id,
+      req.params.channelId,
+      userRow.id,
+      userRow.username,
+      content.trim(),
+    );
 
-  const message = db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
-  const out = mapMessage({ ...message, display_name: userRow.display_name });
-  req.io.to(req.params.channelId).emit("message:new", out);
-  req.io.to("__notifications__").emit("message:new", out);
+    const message = db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
+    const out = mapMessage({ ...message, display_name: userRow.display_name });
+    req.io.to(req.params.channelId).emit("message:new", out);
+    req.io.to("__notifications__").emit("message:new", out);
 
-  // Process @mentions
-  const mentions = parseMentions(content.trim());
-  processMentions(req.io, message, mentions);
+    // Process @mentions
+    const mentions = parseMentions(content.trim());
+    processMentions(req.io, message, mentions);
 
-  return res.status(201).json({ message: out });
-});
+    return res.status(201).json({ message: out });
+  },
+);
 
 // PATCH /api/messages/:id
-router.patch("/:id", authenticate, (req, res) => {
+router.patch("/:id", requireAuth, (req, res) => {
   const { content } = req.body;
   const db = getDb();
   const msg = db
@@ -121,7 +122,7 @@ router.patch("/:id", authenticate, (req, res) => {
 });
 
 // DELETE /api/messages/:id
-router.delete("/:id", authenticate, (req, res) => {
+router.delete("/:id", requireAuth, (req, res) => {
   const db = getDb();
   const msg = db
     .prepare("SELECT * FROM messages WHERE id = ?")

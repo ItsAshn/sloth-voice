@@ -16,6 +16,14 @@ const { autoUpdater } = updaterPkg;
 import Store from "electron-store";
 import { io as ioClient, Socket } from "socket.io-client";
 
+// Must be set before the app is ready so Chromium doesn't attempt to
+// create/move GPU & disk shader caches in read-only locations on Windows.
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+app.commandLine.appendSwitch("disable-gpu-disk-cache");
+// Allow audio to play without requiring a prior user gesture (needed for
+// incoming WebRTC audio streams delivered via mediasoup consumers).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 // Persistent server list store
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const store = new Store<{ servers: SavedServer[] }>({
@@ -277,19 +285,22 @@ function createWindow(): BrowserWindow {
 // Single-instance lock — prevent multiple copies of the app from running
 // ---------------------------------------------------------------------------
 
-const gotTheLock = app.requestSingleInstanceLock();
+const gotTheLock = is.dev || app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   // Another instance is already running; quit this one immediately.
   app.quit();
 } else {
   // When a second launch is attempted, focus the existing window.
-  app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  });
+  // (Only registered in production since dev skips the lock entirely.)
+  if (!is.dev) {
+    app.on("second-instance", () => {
+      if (!mainWindow) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    });
+  }
 }
 
 app.whenReady().then(() => {

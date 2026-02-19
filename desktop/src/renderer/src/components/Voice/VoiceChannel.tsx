@@ -3,6 +3,41 @@ import { io, Socket } from "socket.io-client";
 import { useStore } from "../../store/useStore";
 import { useVoice } from "../../hooks/useVoice";
 
+type Quality = "good" | "fair" | "poor" | null | undefined;
+
+function ConnectionQualityBars({ quality }: { quality: Quality }) {
+  const barCount =
+    quality === "good"
+      ? 3
+      : quality === "fair"
+        ? 2
+        : quality === "poor"
+          ? 1
+          : 0;
+  const color =
+    quality === "good"
+      ? "bg-success"
+      : quality === "fair"
+        ? "bg-yellow-400"
+        : quality === "poor"
+          ? "bg-danger"
+          : "bg-surface-highest";
+  const heights = ["h-[4px]", "h-[6px]", "h-[8px]"];
+  return (
+    <span
+      className="flex items-end gap-[2px] shrink-0"
+      title={quality ? `Connection: ${quality}` : "Measuring connection…"}
+    >
+      {heights.map((h, i) => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-sm ${h} ${i < barCount ? color : "bg-surface-highest"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function VoiceChannel() {
   const {
     activeServer,
@@ -13,6 +48,7 @@ export default function VoiceChannel() {
     members,
     localMuted,
     localSpeaking,
+    localConnectionQuality,
     audioBitrateKbps,
     setAudioBitrateKbps,
   } = useStore();
@@ -97,6 +133,7 @@ export default function VoiceChannel() {
             >
               {session.user.display_name}
             </span>
+            <ConnectionQualityBars quality={localConnectionQuality} />
             <span className="text-[10px] font-mono text-text-muted">
               {localMuted ? "🔇" : ""}
             </span>
@@ -145,6 +182,7 @@ export default function VoiceChannel() {
               >
                 {peer.username}
               </span>
+              <ConnectionQualityBars quality={peer.connectionQuality} />
               {peer.muted && (
                 <span className="text-[10px] text-danger">🔇</span>
               )}
