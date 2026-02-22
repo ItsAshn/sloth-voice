@@ -1,0 +1,73 @@
+# Caddyfile — Reverse proxy for the Discard server
+#
+# Caddy v2 automatically provisions TLS certificates via Let's Encrypt for any
+# public domain listed here.  No certbot or nginx SSL configuration needed.
+#
+# ─── Quick-start examples ───────────────────────────────────────────────────
+#
+#   Local development (no TLS, access via /etc/hosts alias):
+#     Change the site address below to:  http://discard.localhost
+#
+#   Production (single domain, automatic HTTPS):
+#     Change the site address below to:  discard.example.com
+#
+#   Subdomain deployment:
+#     Change the site address below to:  chat.example.com
+#
+#   IPv4-only binding (recommended when mediasoup PUBLIC_ADDRESS is an IPv4):
+#     Prefix the address with the interface:  0.0.0.0 {
+#
+# ─── WebRTC note ────────────────────────────────────────────────────────────
+#
+#   Caddy only proxies HTTP/HTTPS/WebSocket traffic.  The mediasoup UDP port
+#   range (RTC_MIN_PORT–RTC_MAX_PORT, default 40000-49999) must be opened
+#   directly in your firewall / cloud security group and is NOT handled here.
+#   See server/.env.example and server/docker-compose.yml for details.
+#
+# ─── Environment variables ──────────────────────────────────────────────────
+#
+#   SERVER_PORT  — backend HTTP port (default: 5000).  Set in the shell or in
+#                  a .env file loaded by caddy run --envfile .env
+#
+# ────────────────────────────────────────────────────────────────────────────
+
+# Replace with your actual domain (or http://localhost for local testing).
+example.com {
+
+    # ── Reverse proxy ────────────────────────────────────────────────────────
+    # Forward all requests to the Discard backend.
+    # {$SERVER_PORT:5000} reads the SERVER_PORT environment variable and falls
+    # back to 5000 when it is not set.
+    reverse_proxy localhost:{$SERVER_PORT:5000} {
+
+        # ── WebSocket / Socket.IO support ────────────────────────────────────
+        # Caddy handles the Upgrade header automatically for WebSocket
+        # connections, so Socket.IO real-time messaging works out of the box.
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    header {
+        # Prevent the browser from MIME-sniffing the response content type.
+        X-Content-Type-Options nosniff
+
+        # Block the site from being embedded in a frame on another origin.
+        # For modern browsers, prefer Content-Security-Policy: frame-ancestors 'none'
+        # alongside this header for full coverage.
+        X-Frame-Options DENY
+
+        # Only send the bare origin as the Referer header on cross-origin requests.
+        Referrer-Policy strict-origin-when-cross-origin
+
+        # Remove the Server header so the backend technology is not advertised.
+        -Server
+    }
+
+    # ── Health check ─────────────────────────────────────────────────────────
+    # The /health endpoint is passed straight through to the backend.
+    # You can use it with an uptime monitor or Docker HEALTHCHECK:
+    #   curl -f https://example.com/health
+}
