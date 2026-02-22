@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/itsashn/discard-server:v0.3.0
+    image: ghcr.io/itsashn/discard-server:v0.3.1
     build:
       context: .
       dockerfile: Dockerfile

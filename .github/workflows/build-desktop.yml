@@ -23,6 +23,8 @@ jobs:
 
       - name: Build & package (Windows)
         working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --win
 
       - name: Upload Windows installer
@@ -49,6 +51,8 @@ jobs:
 
       - name: Build & package (macOS)
         working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --mac
 
       - name: Upload macOS DMG

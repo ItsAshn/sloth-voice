@@ -54,10 +54,12 @@
       "url": "https://YOUR_WEBSITE/updates"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "sign": null
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "identity": null
     },
     "linux": {
       "target": "AppImage"

@@ -111,7 +111,12 @@ async function openPorts({ httpPort, rtcMinPort, rtcMaxPort }) {
 
   try {
     // ── Probe: single TCP mapping to confirm a gateway is reachable ──────────
-    const probeOk = await mapPort(client, httpPort, "TCP", "Discard Server HTTP/WS");
+    const probeOk = await mapPort(
+      client,
+      httpPort,
+      "TCP",
+      "Discard Server HTTP/WS",
+    );
     if (!probeOk) {
       console.log(
         "[UPnP] No UPnP gateway found (or port mapping refused) — skipping. " +
@@ -154,7 +159,11 @@ async function openPorts({ httpPort, rtcMinPort, rtcMaxPort }) {
   } catch (err) {
     console.warn(`[UPnP] Unexpected error: ${err.message || err}`);
   } finally {
-    try { client.close(); } catch (_) { /* already closed */ }
+    try {
+      client.close();
+    } catch (_) {
+      /* already closed */
+    }
   }
 
   return { effectiveRtcMin, effectiveRtcMax };
