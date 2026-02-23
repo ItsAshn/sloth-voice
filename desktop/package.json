@@ -55,14 +55,17 @@
     },
     "win": {
       "target": "nsis",
-      "sign": null
+      "sign": null,
+      "artifactName": "Sloth-Voice-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
-      "identity": null
+      "identity": null,
+      "artifactName": "Sloth-Voice-${version}.${ext}"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "artifactName": "Sloth-Voice-${version}.${ext}"
     }
   }
 }
