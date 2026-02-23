@@ -296,11 +296,11 @@ website/updates/
 
 ### Image tags
 
-| Tag | Published when |
-|---|---|
-| `latest` | Every push to `master` touching `website/` |
-| `vX.Y.Z` | On a `vX.Y.Z` release tag |
-| `sha-<sha>` | Every build, for traceability |
+| Tag         | Published when                             |
+| ----------- | ------------------------------------------ |
+| `latest`    | Every push to `master` touching `website/` |
+| `vX.Y.Z`    | On a `vX.Y.Z` release tag                  |
+| `sha-<sha>` | Every build, for traceability              |
 
 ---
 
