@@ -146,6 +146,25 @@ async function openPorts({ httpPort, rtcMinPort, rtcMaxPort }) {
       console.log(
         `[UPnP] Server reachable at http://${externalIp}:${httpPort}`,
       );
+
+      // Auto-update PUBLIC_ADDRESS so mediasoup announces the correct IP to
+      // WebRTC clients.  Only override when the current value is blank or a
+      // loopback / unspecified address — an explicit public IP in the env
+      // always takes precedence.
+      const current = (process.env.PUBLIC_ADDRESS || "").trim();
+      const isLocal =
+        !current ||
+        current === "localhost" ||
+        current === "127.0.0.1" ||
+        current === "0.0.0.0" ||
+        current === "::1" ||
+        current === "::";
+      if (isLocal) {
+        process.env.PUBLIC_ADDRESS = externalIp;
+        console.log(
+          `[UPnP] PUBLIC_ADDRESS auto-set to ${externalIp} (was: ${current || "(unset)"}).`,
+        );
+      }
     }
 
     const mapped = openedMappings.length;

@@ -109,7 +109,7 @@ function registerVoiceHandlers(io, socket) {
         const transport = await room.router.createWebRtcTransport({
           listenIps: [
             {
-              ip: "0.0.0.0",
+              ip: process.env.MEDIASOUP_LISTEN_IP || "0.0.0.0",
               announcedIp: process.env.PUBLIC_ADDRESS || "127.0.0.1",
             },
           ],
