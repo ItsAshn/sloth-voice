@@ -20,6 +20,13 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
+      - name: Stamp version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('desktop/package.json'));p.version='$VERSION';fs.writeFileSync('desktop/package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "Stamped desktop/package.json → $VERSION"
+
       - name: Install dependencies
         working-directory: desktop
         run: npm ci
@@ -48,6 +55,12 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
+      - name: Stamp version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('desktop/package.json'));p.version='$VERSION';fs.writeFileSync('desktop/package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "Stamped desktop/package.json → $VERSION"
+
       - name: Install dependencies
         working-directory: desktop
         run: npm ci
@@ -75,6 +88,12 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+
+      - name: Stamp version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('desktop/package.json'));p.version='$VERSION';fs.writeFileSync('desktop/package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "Stamped desktop/package.json → $VERSION"
 
       - name: Install dependencies
         working-directory: desktop
@@ -108,33 +127,30 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/** \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
 
   # ─────────────────────────────────────────────
-  # Tag discard-server → triggers its docker-publish workflow
-  # Requires a PAT secret named DISPATCH_TOKEN with repo scope
-  # on ItsAshn/discard-server (Settings → Secrets → Actions)
+  # Trigger docker-publish workflow in discard-server
+  # Requires a PAT secret named DISPATCH_TOKEN with
+  # Actions: Write permission on ItsAshn/discard-server
+  # (Settings → Secrets → Actions in this repo)
   # ─────────────────────────────────────────────
   dispatch-server:
     needs: github-release
     runs-on: ubuntu-latest
     steps:
-      - name: Create matching tag in discard-server
+      - name: Trigger docker-publish in discard-server
         env:
           GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          SHA=$(gh api repos/ItsAshn/discard-server/git/ref/heads/master --jq '.object.sha')
-          # Create tag (or force-update if it already exists)
-          gh api repos/ItsAshn/discard-server/git/refs \
-            -f ref="refs/tags/$TAG" \
-            -f sha="$SHA" \
-            2>/dev/null \
-          || gh api "repos/ItsAshn/discard-server/git/refs/tags/$TAG" \
-            -X PATCH \
-            -f sha="$SHA" \
-            -F force=true
-          echo "Tagged discard-server at $TAG ($SHA)"
+          gh workflow run docker-publish.yml \
+            --repo ItsAshn/discard-server \
+            --ref master \
+            --field version="${GITHUB_REF_NAME}"
+          echo "Triggered discard-server docker-publish for ${GITHUB_REF_NAME}"
