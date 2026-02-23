@@ -8,6 +8,7 @@
     "desktop": "cd desktop && npm run dev",
     "mobile": "cd mobile && npx expo start",
     "install:all": "npm i --prefix server && npm i --prefix desktop && npm i --prefix mobile",
-    "dev": "start cmd /k npm run server && start cmd /k npm run desktop"
+    "dev": "start cmd /k npm run server && start cmd /k npm run desktop",
+    "release": "node scripts/release.mjs"
   }
 }
