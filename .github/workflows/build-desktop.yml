@@ -30,7 +30,7 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: Discard-Windows
+          name: SlothVoice-Windows
           path: desktop/dist/*.exe
 
   build-macos:
@@ -58,5 +58,5 @@ jobs:
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
-          name: Discard-macOS
+          name: SlothVoice-macOS
           path: desktop/dist/*.dmg
