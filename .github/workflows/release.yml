@@ -130,11 +130,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Delete any existing release for this tag (e.g. a GitHub-auto-created draft)
+          gh release delete "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --yes 2>/dev/null || true
           gh release create "$GITHUB_REF_NAME" artifacts/** \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --clobber
+            --generate-notes
 
   # ─────────────────────────────────────────────
   # Trigger docker-publish workflow in discard-server
