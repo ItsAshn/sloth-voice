@@ -2,42 +2,208 @@
 
 The self-hostable backend for **Discard** — a locally-hosted Discord alternative.
 
-Desktop and mobile client coming in the next few days.
+---
+
+## Table of Contents
+
+- [Option 1 — Plain HTTP](#option-1--plain-http)
+- [Option 2 — HTTPS via Caddy](#option-2--https-via-caddy)
+- [Docker Quick Reference](#docker-quick-reference)
+- [Manual Setup (Node.js)](#manual-setup-nodejs)
+- [Environment Variables](#environment-variables)
 
 ---
 
-## Quick Start (Docker — recommended)
+## Option 1 — Plain HTTP
 
-Docker is the easiest way to run and **keep the server up to date**. No Node.js required.
+Use this when you want **anyone on the internet** to connect and you do not need HTTPS.
 
-**Requirements:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) v2+
+### Step 1 — Find your public IPv4
 
 ```bash
-# 1. Download the compose file
-curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/master/docker-compose.yml
+curl -4 https://ifconfig.me
+```
 
-# 2. Create your .env (edit the values before starting)
+### Step 2 — Set up port forwarding on your router
+
+Forward the following ports to your server's LAN IP:
+
+| External port   | Internal port   | Protocol |
+| --------------- | --------------- | -------- |
+| `5000`          | `5000`          | TCP      |
+| `40000`–`40099` | `40000`–`40099` | UDP      |
+
+(Exact steps vary by router — check your router's admin panel.)
+
+### Step 3 — Download compose file and create `.env`
+
+```bash
+curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/master/docker-compose.yml
 curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/master/.env.example
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum set `JWT_SECRET` and `PUBLIC_ADDRESS`, then start:
+### Step 4 — Edit `.env`
+
+```env
+JWT_SECRET=replace_with_a_long_random_string
+SERVER_PASSWORD=optional_join_password
+MEDIASOUP_LISTEN_IP=0.0.0.0
+PUBLIC_ADDRESS=203.0.113.42   # ← your public IPv4
+```
+
+### Step 5 — Open firewall ports
+
+| Port range                                         | Protocol | Purpose              |
+| -------------------------------------------------- | -------- | -------------------- |
+| `5000` (or `SERVER_PORT`)                          | TCP      | HTTP API + WebSocket |
+| `40000`–`40099` (or `RTC_MIN_PORT`–`RTC_MAX_PORT`) | UDP      | Voice chat (WebRTC)  |
+
+```bash
+sudo ufw allow 5000/tcp
+sudo ufw allow 40000:40099/udp
+```
+
+### Step 6 — Start and verify
 
 ```bash
 docker compose up -d
+curl http://203.0.113.42:5000/health
 ```
 
-The server starts on `http://localhost:5000` (or your configured `SERVER_PORT`).  
-Check `http://localhost:5000/health` to verify it is running.
+### Step 7 — Connect a client
 
-### Updating to the latest version
+Point the Discard client at `http://203.0.113.42:5000`.
+
+---
+
+## Option 2 — HTTPS via Caddy
+
+Use this when you have a **domain name** and want automatic HTTPS. Caddy proxies
+HTTP/WebSocket traffic to the server on port 5000. The WebRTC UDP ports still go
+directly to the server — they cannot be proxied.
+
+A ready-to-use `Caddyfile` is included in this repository.
+
+### Step 1 — Point your domain at the server
+
+Create an **A record** in your DNS pointing `discard.example.com` to your server's public IPv4.
+
+### Step 2 — Install Caddy
 
 ```bash
-docker compose pull          # fetch the newest image from ghcr.io
-docker compose up -d         # restart the container with the new image
+# Debian / Ubuntu
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy
 ```
 
-Your database is stored in a Docker volume (`server_data`) and is **not affected** by updates.
+See [https://caddyserver.com/docs/install](https://caddyserver.com/docs/install) for other operating systems.
+
+### Step 3 — Configure the Caddyfile
+
+Copy the included `Caddyfile` to `/etc/caddy/Caddyfile` and replace the placeholder domain:
+
+```bash
+sudo cp Caddyfile /etc/caddy/Caddyfile
+sudo sed -i 's/discard.example.com/your.actual.domain/' /etc/caddy/Caddyfile
+```
+
+Or edit it manually — see [Caddyfile](#caddyfile-reference) below.
+
+### Step 4 — Open firewall ports
+
+| Port            | Protocol | Purpose                                   |
+| --------------- | -------- | ----------------------------------------- |
+| `80`            | TCP      | HTTP (Caddy redirects to HTTPS)           |
+| `443`           | TCP      | HTTPS + WebSocket                         |
+| `40000`–`40099` | UDP      | Voice chat (WebRTC — direct, not proxied) |
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 40000:40099/udp
+```
+
+### Step 5 — Edit `.env`
+
+```env
+JWT_SECRET=replace_with_a_long_random_string
+SERVER_PASSWORD=optional_join_password
+MEDIASOUP_LISTEN_IP=0.0.0.0
+PUBLIC_ADDRESS=203.0.113.42   # ← your public IPv4 (NOT the domain name)
+```
+
+> ⚠️ Even when using a domain with Caddy, `PUBLIC_ADDRESS` must still be the raw
+> IPv4 — mediasoup uses it only for ICE candidates, which go over UDP directly.
+
+### Step 6 — Start both services
+
+```bash
+# Start the Discard server
+docker compose up -d
+
+# Reload Caddy
+sudo systemctl reload caddy
+```
+
+### Step 7 — Verify
+
+```bash
+curl https://your.actual.domain/health
+```
+
+### Step 8 — Connect a client
+
+Point the Discard client at `https://your.actual.domain` (no port needed).
+
+---
+
+## Caddyfile Reference
+
+The included `Caddyfile` configures Caddy as a reverse proxy with automatic HTTPS
+and proper WebSocket support:
+
+```caddy
+discard.example.com {
+    reverse_proxy localhost:5000
+}
+```
+
+Caddy automatically:
+
+- Obtains and renews a TLS certificate from Let's Encrypt
+- Redirects HTTP → HTTPS
+- Forwards WebSocket upgrade headers
+
+> ⚠️ The `Caddyfile` only covers HTTP/WebSocket (port 443). The RTC UDP port range
+> (`40000`–`40099`) must be opened directly in the firewall — Caddy cannot proxy UDP.
+
+---
+
+## Docker Quick Reference
+
+```bash
+# Start (detached)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+
+# Update to the latest image
+docker compose pull
+docker compose up -d
+
+# Back up the database
+docker run --rm -v server_data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/discard-backup.tar.gz /data
+```
+
+Your database is stored in the `server_data` Docker volume and is **never affected** by image updates.
 
 ---
 
@@ -48,7 +214,7 @@ Your database is stored in a Docker volume (`server_data`) and is **not affected
 - [Node.js](https://nodejs.org/) v20+
 - npm v9+
 
-### Setup
+### Step 1 — Clone and install
 
 ```bash
 git clone https://github.com/ItsAshn/discard-server.git
@@ -56,39 +222,15 @@ cd discard-server
 npm install
 ```
 
-Copy `.env.example` to `.env` and edit it:
+### Step 2 — Create `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-```env
-SERVER_PORT=5000
-SERVER_NAME=My Discard Server
-SERVER_DESCRIPTION=A locally-hosted Discard server
-# Optional: set a password to restrict registration (leave blank for open access)
-SERVER_PASSWORD=
+Edit the file and set at minimum `JWT_SECRET` and `PUBLIC_ADDRESS` (see the hosting options above for the correct values).
 
-JWT_SECRET=change_this_to_a_long_random_secret
-
-SERVER_DB_PATH=./server.db
-
-# mediasoup (voice chat) settings
-# PUBLIC_ADDRESS must be a plain IPv4 address — NOT a hostname like "localhost".
-# Chromium resolves "localhost" to ::1 (IPv6) but mediasoup binds on IPv4 only,
-# which causes ICE negotiation to fail silently and voice chat to produce no audio.
-#   Local testing  → 127.0.0.1
-#   LAN hosting    → your LAN IP  (e.g. 192.168.1.100)
-#   Public hosting → your public IPv4  (e.g. 203.0.113.42)
-MEDIASOUP_LISTEN_IP=0.0.0.0
-PUBLIC_ADDRESS=127.0.0.1
-RTC_MIN_PORT=40000
-RTC_MAX_PORT=49999
-```
-
-> **Important:** Set `SERVER_PASSWORD` and `JWT_SECRET` before sharing with anyone.
-
-### Run
+### Step 3 — Run
 
 ```bash
 # Development (auto-restarts on file changes)
@@ -98,40 +240,34 @@ npm run dev
 npm start
 ```
 
-The server starts on `http://localhost:5000` (or your configured `SERVER_PORT`).  
-Check `http://localhost:5000/health` to verify it is running.
+Check `http://localhost:5000/health` to confirm the server is running.
 
 ### Updating
 
 ```bash
 git pull
-npm install        # in case dependencies changed
+npm install   # in case dependencies changed
 npm start
 ```
 
 ---
 
-## Hosting on a LAN or the Internet
-
-1. Set `MEDIASOUP_LISTEN_IP` to `0.0.0.0` (binds to all interfaces).
-2. Set `PUBLIC_ADDRESS` to your machine's **IPv4 address** or a hostname that resolves to one.
-   > ⚠️ **Do not use `localhost` here.** The Discard desktop client runs on Chromium, which resolves `localhost` to `::1` (IPv6). Because mediasoup only binds on IPv4, this causes ICE negotiation to fail silently — clients connect to the server but hear no voice audio. Always use a dotted-decimal IPv4 address (e.g. `192.168.1.100` for LAN, `203.0.113.42` for public).
-3. Open firewall ports:
-   - `SERVER_PORT` (TCP) — for API and WebSocket connections
-   - `RTC_MIN_PORT`–`RTC_MAX_PORT` (UDP) — for voice chat (mediasoup WebRTC)
-4. Point the Discard desktop/mobile client at `http://<your-ip>:<SERVER_PORT>`.
-
 ## Environment Variables
 
-| Variable              | Default             | Description                                                                                                                                                                                                                                                                                                                  |
-| --------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SERVER_PORT`         | `5000`              | Port the server listens on                                                                                                                                                                                                                                                                                                   |
-| `SERVER_NAME`         | `My Discard Server` | Name shown to clients                                                                                                                                                                                                                                                                                                        |
-| `SERVER_DESCRIPTION`  | _(empty)_           | Server description                                                                                                                                                                                                                                                                                                           |
-| `SERVER_PASSWORD`     | _(empty)_           | Optional password required to register an account (open if blank)                                                                                                                                                                                                                                                            |
-| `JWT_SECRET`          | _(must be set)_     | Secret used to sign auth tokens                                                                                                                                                                                                                                                                                              |
-| `SERVER_DB_PATH`      | `./server.db`       | Path to the SQLite database file                                                                                                                                                                                                                                                                                             |
-| `MEDIASOUP_LISTEN_IP` | `0.0.0.0`           | IP mediasoup binds to internally (use `0.0.0.0` for all interfaces)                                                                                                                                                                                                                                                          |
-| `PUBLIC_ADDRESS`      | `127.0.0.1`         | **Must be a dotted-decimal IPv4 address.** Used as the ICE candidate address sent to clients. Setting this to a hostname (e.g. `localhost`) causes the Electron client to resolve it to IPv6 (`::1`), which breaks voice audio entirely. Use `127.0.0.1` locally, your LAN IP on a LAN, or your public IPv4 on the internet. |
-| `RTC_MIN_PORT`        | `40000`             | Start of UDP port range for WebRTC                                                                                                                                                                                                                                                                                           |
-| `RTC_MAX_PORT`        | `49999`             | End of UDP port range for WebRTC                                                                                                                                                                                                                                                                                             |
+| Variable              | Default             | Description                                                                                                                                                                                                                          |
+| --------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SERVER_PORT`         | `5000`              | Port the HTTP server and WebSocket listen on. Must match your firewall/port-forward rules.                                                                                                                                           |
+| `SERVER_NAME`         | `My Discard Server` | Display name shown to clients.                                                                                                                                                                                                       |
+| `SERVER_DESCRIPTION`  | _(empty)_           | Short description shown to clients.                                                                                                                                                                                                  |
+| `SERVER_PASSWORD`     | _(empty)_           | Optional join password. Anyone registering an account must supply this. Leave blank for open access.                                                                                                                                 |
+| `JWT_SECRET`          | _(must be set)_     | Signs and verifies auth tokens. Use a long random string (`openssl rand -hex 64`). Changing it invalidates all sessions.                                                                                                             |
+| `SERVER_DB_PATH`      | `./server.db`       | Path to the SQLite database. In Docker this is set to `/data/server.db` inside the container automatically.                                                                                                                          |
+| `MEDIASOUP_LISTEN_IP` | `0.0.0.0`           | IP mediasoup binds to internally. Keep `0.0.0.0` to listen on all interfaces.                                                                                                                                                        |
+| `PUBLIC_ADDRESS`      | `127.0.0.1`         | **Must be a bare IPv4 address — never a hostname.** Sent to clients as the WebRTC ICE candidate. Using a hostname causes Chromium to resolve it to IPv6 (`::1`), silently breaking voice. Use your public IPv4 for internet hosting. |
+| `RTC_MIN_PORT`        | `40000`             | Start of the UDP port range for WebRTC voice. Must be open in your firewall.                                                                                                                                                         |
+| `RTC_MAX_PORT`        | `40099`             | End of the UDP port range. Each voice participant uses ~2 ports; 100 ports supports ~50 concurrent users.                                                                                                                            |
+| `MEDIASOUP_LOG_LEVEL` | `warn`              | mediasoup log verbosity: `debug`, `warn`, `error`, or `none`.                                                                                                                                                                        |
+| `AUDIO_BITRATE_KBPS`  | `64`                | Server-side audio bitrate cap in kbps. Opus useful range is 32–320; 64 is a good default.                                                                                                                                            |
+| `UPNP_ENABLED`        | `true`              | Automatically forward ports on your router via UPnP at startup. Safe to enable — silently skipped if the router does not support UPnP. Disable on VPS/dedicated servers.                                                             |
+| `UPNP_TTL`            | `0`                 | UPnP lease duration in seconds. `0` = indefinite (recommended — prevents voice from dropping when the lease expires).                                                                                                                |
+| `UPNP_RTC_MAX_PORTS`  | `50`                | Maximum RTC UDP ports to map via UPnP. If the RTC range is wider, it is automatically narrowed to this count so forwarding and mediasoup stay in sync.                                                                               |
