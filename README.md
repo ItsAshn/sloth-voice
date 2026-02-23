@@ -17,6 +17,7 @@ A locally-hosted Discord alternative. You self-host the server and connect with 
 | `desktop/`                  | Desktop client                 | Electron, React, Vite, Tailwind        |
 | `mobile/`                   | Mobile client                  | React Native, Expo                     |
 | `client/`                   | Web client (browser)           | React, Vite, Tailwind                  |
+| `website/`                  | Landing page                   | Qwik, Tailwind, Docker                 |
 | `server/docker-compose.yml` | Container orchestration        | Docker, Docker Compose                 |
 
 ---
@@ -245,6 +246,61 @@ curl http://localhost:5000/health
 By default, Docker Compose exposes UDP ports `40000–40099` for WebRTC. The range is intentionally kept small for Docker compatibility. Adjust `RTC_MIN_PORT` / `RTC_MAX_PORT` in your `.env` and ensure the same range is open in your firewall.
 
 **Linux only:** replace the `ports` entries in `server/docker-compose.yml` with `network_mode: host` for zero-overhead voice (no port mapping needed).
+
+---
+
+## Hosting the Website
+
+The landing page (`website/`) is published as a Docker image to GHCR on every push to `master` that touches `website/`:
+
+```
+ghcr.io/itsashn/sloth-voice-website:latest
+```
+
+### 1. Pull and run (recommended)
+
+Copy `website/docker-compose.yml` to your server, then:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The site listens on port `3000` by default. Override with `WEBSITE_PORT`:
+
+```bash
+WEBSITE_PORT=8080 docker compose up -d
+```
+
+### 2. Redeploy after a new push
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+That's it — no build step needed on the server.
+
+### 3. Serving desktop release artifacts
+
+The download section of the site reads `https://slothvoice.com/updates/latest.yml` at request time to display the current version and link to the correct installers. After publishing a new desktop release via `npm run release -- vX.Y.Z`, copy the build output into `website/updates/` and redeploy:
+
+```
+website/updates/
+  latest.yml
+  latest-mac.yml
+  latest-linux.yml
+  Sloth Voice Setup <version>.exe
+  Sloth Voice-<version>.dmg
+  Sloth Voice-<version>.AppImage
+```
+
+### Image tags
+
+| Tag | Published when |
+|---|---|
+| `latest` | Every push to `master` touching `website/` |
+| `vX.Y.Z` | On a `vX.Y.Z` release tag |
+| `sha-<sha>` | Every build, for traceability |
 
 ---
 
