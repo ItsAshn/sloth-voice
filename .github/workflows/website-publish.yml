@@ -3,7 +3,6 @@ name: Publish Website Image
 on:
   push:
     branches: [master]
-    tags: ["v*"]
     paths:
       - "website/**"
       - ".github/workflows/website-publish.yml"
@@ -47,7 +46,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./website
+          context: ${{ github.workspace }}/website
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
