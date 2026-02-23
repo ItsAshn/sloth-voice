@@ -41,8 +41,8 @@
     "typescript": "^5.2.2"
   },
   "build": {
-    "appId": "com.discard.desktop",
-    "productName": "Discard",
+    "appId": "com.slothvoice.desktop",
+    "productName": "Sloth Voice",
     "directories": {
       "output": "dist"
     },
@@ -51,7 +51,7 @@
     ],
     "publish": {
       "provider": "generic",
-      "url": "https://YOUR_WEBSITE/updates"
+      "url": "https://slothvoice.com/updates"
     },
     "win": {
       "target": "nsis",

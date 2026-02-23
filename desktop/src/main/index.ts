@@ -215,11 +215,11 @@ function createTray(win: BrowserWindow): void {
   // Use a blank 1×1 image as default; replace with your icon asset if available
   const icon = nativeImage.createEmpty();
   tray = new Tray(icon);
-  tray.setToolTip("Discard");
+  tray.setToolTip("Sloth Voice");
 
   const menu = Menu.buildFromTemplate([
     {
-      label: "Show Discard",
+      label: "Show Sloth Voice",
       click: () => {
         win.show();
         win.focus();
@@ -304,7 +304,7 @@ if (!gotTheLock) {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId("com.discard.desktop");
+  electronApp.setAppUserModelId("com.slothvoice.desktop");
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -418,7 +418,7 @@ app.whenReady().then(() => {
         type: "info",
         title: "Update available",
         message:
-          "A new version of Discard is available. It will be downloaded in the background.",
+          "A new version of Sloth Voice is available. It will be downloaded in the background.",
         buttons: ["OK"],
       });
     });
@@ -428,7 +428,8 @@ app.whenReady().then(() => {
         .showMessageBox(mainWindow, {
           type: "info",
           title: "Update ready",
-          message: "Update downloaded. Restart Discard to apply the update.",
+          message:
+            "Update downloaded. Restart Sloth Voice to apply the update.",
           buttons: ["Restart now", "Later"],
         })
         .then(({ response }) => {

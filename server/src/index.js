@@ -14,6 +14,7 @@ const roleRoutes = require("./routes/roles");
 const { registerChatHandlers } = require("./socket/chatHandler");
 const { registerVoiceHandlers } = require("./socket/voiceHandler");
 const { openPorts, registerShutdownHook } = require("./upnp");
+const { resolvePublicAddress, startIpWatcher } = require("./publicAddress");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -78,6 +79,13 @@ async function start() {
   // Apply the (possibly clamped) range before the worker reads from env.
   process.env.RTC_MIN_PORT = String(effectiveRtcMin);
   process.env.RTC_MAX_PORT = String(effectiveRtcMax);
+
+  // Resolve PUBLIC_ADDRESS to a bare IPv4 — supports static IPs, DDNS
+  // hostnames, and fully automatic detection via public IP-echo services.
+  // The watcher keeps it current if the IP changes (ISP reassignment, DDNS
+  // propagation, etc.) so voice stays working without a server restart.
+  await resolvePublicAddress();
+  startIpWatcher();
 
   await createWorker();
 
