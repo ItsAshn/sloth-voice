@@ -1,0 +1,16 @@
+{
+  "name": "sloth / voice",
+  "short_name": "sloth",
+  "description": "self-hosted voice & text chat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ]
+}
