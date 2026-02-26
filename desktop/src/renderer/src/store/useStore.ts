@@ -185,7 +185,7 @@ export const useStore = create<StoreState>()(
       setAudioOutputDeviceId: (id) => set({ audioOutputDeviceId: id }),
     }),
     {
-      name: "discard-saved-servers",
+      name: "sloth-voice-saved-servers",
       // Persist the server list and per-server login sessions
       partialize: (state) => ({
         savedServers: state.savedServers,

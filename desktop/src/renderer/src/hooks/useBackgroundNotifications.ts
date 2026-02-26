@@ -18,7 +18,7 @@ import { useStoreHydrated } from "./useStoreHydrated";
 import type { Message, Channel } from "../types";
 
 // Minimal inline type for the background-notification bridge
-interface DiscardNotificationBridge {
+interface SlothVoiceNotificationBridge {
   watchServer(args: {
     serverId: string;
     serverName: string;
@@ -58,9 +58,9 @@ interface DiscardNotificationBridge {
 }
 
 /** Guard: returns the bridge only when running inside Electron. */
-function getBridge(): DiscardNotificationBridge | null {
+function getBridge(): SlothVoiceNotificationBridge | null {
   return (
-    (window as unknown as { discard?: DiscardNotificationBridge }).discard ??
+    (window as unknown as { slothVoice?: SlothVoiceNotificationBridge }).slothVoice ??
     null
   );
 }

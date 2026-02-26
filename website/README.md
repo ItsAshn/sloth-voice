@@ -85,8 +85,8 @@ Sloth-Voice-<version>.AppImage
 
 ## repo
 
-This site lives inside the discard monorepo:
+This site lives inside the Sloth Voice monorepo:
 
 ```
-ItsAshn/discard  →  website/
+ItsAshn/sloth-voice  →  website/
 ```

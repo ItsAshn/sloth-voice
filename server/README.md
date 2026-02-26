@@ -1,6 +1,6 @@
-# discard-server
+# sloth-voice-server
 
-The self-hostable backend for **Discard** — a locally-hosted Discord alternative.
+The self-hostable backend for **Sloth Voice** — a locally-hosted Discord alternative.
 
 ---
 
@@ -38,8 +38,8 @@ Forward the following ports to your server's LAN IP:
 ### Step 3 — Download compose file and create `.env`
 
 ```bash
-curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/master/docker-compose.yml
-curl -O https://raw.githubusercontent.com/ItsAshn/discard-server/master/.env.example
+curl -O https://raw.githubusercontent.com/ItsAshn/sloth-voice-server/master/docker-compose.yml
+curl -O https://raw.githubusercontent.com/ItsAshn/sloth-voice-server/master/.env.example
 cp .env.example .env
 ```
 
@@ -73,7 +73,7 @@ curl http://203.0.113.42:5000/health
 
 ### Step 7 — Connect a client
 
-Point the Discard client at `http://203.0.113.42:5000`.
+Point the Sloth Voice client at `http://203.0.113.42:5000`.
 
 ---
 
@@ -87,7 +87,7 @@ A ready-to-use `Caddyfile` is included in this repository.
 
 ### Step 1 — Point your domain at the server
 
-Create an **A record** in your DNS pointing `discard.example.com` to your server's public IPv4.
+Create an **A record** in your DNS pointing `sloth-voice.example.com` to your server's public IPv4.
 
 ### Step 2 — Install Caddy
 
@@ -107,7 +107,7 @@ Copy the included `Caddyfile` to `/etc/caddy/Caddyfile` and replace the placehol
 
 ```bash
 sudo cp Caddyfile /etc/caddy/Caddyfile
-sudo sed -i 's/discard.example.com/your.actual.domain/' /etc/caddy/Caddyfile
+sudo sed -i 's/sloth-voice.example.com/your.actual.domain/' /etc/caddy/Caddyfile
 ```
 
 Or edit it manually — see [Caddyfile](#caddyfile-reference) below.
@@ -141,7 +141,7 @@ PUBLIC_ADDRESS=203.0.113.42   # ← your public IPv4 (NOT the domain name)
 ### Step 6 — Start both services
 
 ```bash
-# Start the Discard server
+# Start the Sloth Voice server
 docker compose up -d
 
 # Reload Caddy
@@ -156,7 +156,7 @@ curl https://your.actual.domain/health
 
 ### Step 8 — Connect a client
 
-Point the Discard client at `https://your.actual.domain` (no port needed).
+Point the Sloth Voice client at `https://your.actual.domain` (no port needed).
 
 ---
 
@@ -166,7 +166,7 @@ The included `Caddyfile` configures Caddy as a reverse proxy with automatic HTTP
 and proper WebSocket support:
 
 ```caddy
-discard.example.com {
+sloth-voice.example.com {
     reverse_proxy localhost:5000
 }
 ```
@@ -200,7 +200,7 @@ docker compose up -d
 
 # Back up the database
 docker run --rm -v server_data:/data -v $(pwd):/backup alpine \
-  tar czf /backup/discard-backup.tar.gz /data
+  tar czf /backup/sloth-voice-backup.tar.gz /data
 ```
 
 Your database is stored in the `server_data` Docker volume and is **never affected** by image updates.
@@ -217,8 +217,8 @@ Your database is stored in the `server_data` Docker volume and is **never affect
 ### Step 1 — Clone and install
 
 ```bash
-git clone https://github.com/ItsAshn/discard-server.git
-cd discard-server
+git clone https://github.com/ItsAshn/sloth-voice-server.git
+cd sloth-voice-server
 npm install
 ```
 
@@ -257,7 +257,7 @@ npm start
 | Variable              | Default             | Description                                                                                                                                                                                                                          |
 | --------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SERVER_PORT`         | `5000`              | Port the HTTP server and WebSocket listen on. Must match your firewall/port-forward rules.                                                                                                                                           |
-| `SERVER_NAME`         | `My Discard Server` | Display name shown to clients.                                                                                                                                                                                                       |
+| `SERVER_NAME`         | `My Sloth Voice Server` | Display name shown to clients.                                                                                                                                                                                                       |
 | `SERVER_DESCRIPTION`  | _(empty)_           | Short description shown to clients.                                                                                                                                                                                                  |
 | `SERVER_PASSWORD`     | _(empty)_           | Optional join password. Anyone registering an account must supply this. Leave blank for open access.                                                                                                                                 |
 | `JWT_SECRET`          | _(must be set)_     | Signs and verifies auth tokens. Use a long random string (`openssl rand -hex 64`). Changing it invalidates all sessions.                                                                                                             |

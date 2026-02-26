@@ -31,11 +31,19 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY src/ ./src/
 COPY package.json ./
 
+# Create a non-root user for security
+RUN groupadd --system sloth && useradd --system --gid sloth sloth
+
 # Directory for the SQLite database (mount a volume here in production)
-RUN mkdir -p /data
+RUN mkdir -p /data && chown sloth:sloth /data
 ENV SERVER_DB_PATH=/data/server.db
 
 EXPOSE 5000
+
+USER sloth
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:5000/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"
 
 # node:sqlite is behind the --experimental-sqlite flag (Node 22)
 CMD ["node", "--experimental-sqlite", "src/index.js"]

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fetchServerInfo } from "../../api/server";
 import type { SavedServer } from "../../types";
 
@@ -17,6 +17,12 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
   } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +49,7 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
         addedAt: Date.now(),
       };
       // IPC returns the full updated SavedServer[]
-      const result = await window.discard?.addServer(newEntry);
+      const result = await window.slothVoice?.addServer(newEntry);
       const servers = (result ??
         []) as unknown as import("../../types").SavedServer[];
       const newServer =
@@ -57,8 +63,8 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-box max-w-md">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box max-w-md" onClick={(e) => e.stopPropagation()}>
         <p className="text-text-muted text-[10px] tracking-widest uppercase mb-1">
           // connect
         </p>

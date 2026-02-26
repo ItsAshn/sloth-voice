@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Discard",
-    "slug": "discard",
+    "name": "Sloth Voice",
+    "slug": "sloth-voice",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "discard",
+    "scheme": "sloth-voice",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -12,13 +12,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.discard.mobile"
+      "bundleIdentifier": "com.slothvoice.mobile"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#5865F2"
       },
-      "package": "com.discard.mobile"
+      "package": "com.slothvoice.mobile"
     },
     "plugins": ["expo-camera", "expo-av"]
   }

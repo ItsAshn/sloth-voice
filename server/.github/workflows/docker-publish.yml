@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: itsashn/discard-server
+  IMAGE_NAME: itsashn/sloth-voice-server
 
 jobs:
   build-and-push:
@@ -39,7 +39,7 @@ jobs:
           # Update package.json version
           node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$VERSION_NUM';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
           # Update docker-compose.yml image tag to pinned version
-          sed -i "s|image: ghcr.io/itsashn/discard-server:.*|image: ghcr.io/itsashn/discard-server:${TAG}|" docker-compose.yml
+          sed -i "s|image: ghcr.io/itsashn/sloth-voice-server:.*|image: ghcr.io/itsashn/sloth-voice-server:${TAG}|" docker-compose.yml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json docker-compose.yml

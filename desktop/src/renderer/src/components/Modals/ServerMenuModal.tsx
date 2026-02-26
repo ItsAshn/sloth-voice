@@ -74,6 +74,12 @@ export default function ServerMenuModal({ onClose }: Props) {
   const session = activeServer ? sessions[activeServer.id] : undefined;
   const isAdmin = session?.user?.role === "admin";
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   // ─── Profile ──────────────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState(
     session?.user?.display_name ?? "",
@@ -452,7 +458,7 @@ export default function ServerMenuModal({ onClose }: Props) {
         newExpiry !== "0" ? parseFloat(newExpiry) : undefined;
       const invite = await createInvite(maxUses, expiresInHours);
       setInvites((prev) => [invite, ...prev]);
-      const deepLink = `discard://join?server=${encodeURIComponent(activeServer!.url)}&code=${invite.code}`;
+      const deepLink = `sloth-voice://join?server=${encodeURIComponent(activeServer!.url)}&code=${invite.code}`;
       const qrDataUrl = await QRCode.toDataURL(deepLink, {
         width: 200,
         margin: 2,
@@ -473,7 +479,7 @@ export default function ServerMenuModal({ onClose }: Props) {
       setActiveQr(null);
       return;
     }
-    const deepLink = `discard://join?server=${encodeURIComponent(activeServer!.url)}&code=${invite.code}`;
+    const deepLink = `sloth-voice://join?server=${encodeURIComponent(activeServer!.url)}&code=${invite.code}`;
     const qrDataUrl = await QRCode.toDataURL(deepLink, {
       width: 200,
       margin: 2,

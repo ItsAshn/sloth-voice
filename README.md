@@ -1,4 +1,4 @@
-# Discard
+# Sloth Voice
 
 A locally-hosted Discord alternative. You self-host the server and connect with the desktop or mobile client.
 
@@ -6,8 +6,8 @@ A locally-hosted Discord alternative. You self-host the server and connect with 
 
 | Repo                                                                | Visibility | Contents                                           |
 | ------------------------------------------------------------------- | ---------- | -------------------------------------------------- |
-| [ItsAshn/discard](https://github.com/ItsAshn/discard)               | Private    | Full monorepo (server + desktop + mobile + client) |
-| [ItsAshn/discard-server](https://github.com/ItsAshn/discard-server) | Public     | Server only — for self-hosters                     |
+| [ItsAshn/sloth-voice](https://github.com/ItsAshn/sloth-voice)               | Private    | Full monorepo (server + desktop + mobile + client) |
+| [ItsAshn/sloth-voice-server](https://github.com/ItsAshn/sloth-voice-server) | Public     | Server only — for self-hosters                     |
 
 ## Projects
 
@@ -55,8 +55,8 @@ Copy or edit `server/.env`:
 
 ```env
 SERVER_PORT=5000
-SERVER_NAME=My Discard Server
-SERVER_DESCRIPTION=A locally-hosted Discard server
+SERVER_NAME=My Sloth Voice Server
+SERVER_DESCRIPTION=A locally-hosted Sloth Voice server
 # Optional: set a password to restrict registration (leave blank for open access)
 SERVER_PASSWORD=
 
@@ -131,7 +131,7 @@ The Electron app will launch and prompt you to enter your server's URL (e.g. `ht
 
 ### Auto-updates
 
-The desktop app uses [`electron-updater`](https://www.electron.build/auto-update) pointed at **GitHub Releases** on the private `ItsAshn/discard` repo.
+The desktop app uses [`electron-updater`](https://www.electron.build/auto-update) pointed at **GitHub Releases** on the private `ItsAshn/sloth-voice` repo.
 
 **To publish an update:**
 
@@ -189,7 +189,7 @@ This opens two terminal windows — one for the server and one for the desktop c
 | Variable              | Default             | Description                                                                     |
 | --------------------- | ------------------- | ------------------------------------------------------------------------------- |
 | `SERVER_PORT`         | `5000`              | Port the server listens on                                                      |
-| `SERVER_NAME`         | `My Discard Server` | Name shown to clients                                                           |
+| `SERVER_NAME`         | `My Sloth Voice Server` | Name shown to clients                                                           |
 | `SERVER_DESCRIPTION`  | _(empty)_           | Server description                                                              |
 | `SERVER_PASSWORD`     | _(empty)_           | Optional password required to register an account (leave blank for open access) |
 | `JWT_SECRET`          | _(must be set)_     | Secret used to sign auth tokens                                                 |

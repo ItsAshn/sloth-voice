@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { format } from "date-fns";
 import { useStore } from "../../store/useStore";
 import { deleteMessage, configureApi } from "../../api/server";
@@ -35,6 +36,7 @@ function renderContent(content: string, currentUsername?: string) {
 export default function MessageItem({ message, currentUserId }: Props) {
   const { activeServer, sessions, messages, setMessages } = useStore();
   const session = activeServer ? sessions[activeServer.id] : undefined;
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleDelete = async () => {
     if (!activeServer || !session) return;
@@ -65,13 +67,29 @@ export default function MessageItem({ message, currentUserId }: Props) {
           <span className="text-text-muted text-[10px] font-mono">
             {format(new Date(message.created_at), "HH:mm")}
           </span>
-          {isOwn && (
+          {isOwn && !confirmDelete && (
             <button
-              onClick={handleDelete}
-              className="text-danger text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => setConfirmDelete(true)}
+              className="text-danger text-xs px-1 py-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-danger/10 transition-all"
             >
               del
             </button>
+          )}
+          {isOwn && confirmDelete && (
+            <span className="flex items-center gap-1">
+              <button
+                onClick={handleDelete}
+                className="text-danger text-xs px-1.5 py-0.5 rounded bg-danger/10 hover:bg-danger/20 transition-colors"
+              >
+                confirm
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-text-muted text-xs px-1 py-0.5 rounded hover:bg-surface-highest transition-colors"
+              >
+                cancel
+              </button>
+            </span>
           )}
         </div>
         <p

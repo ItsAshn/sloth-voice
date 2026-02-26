@@ -1,7 +1,7 @@
 {
-  "name": "discard-desktop",
+  "name": "sloth-voice-desktop",
   "version": "0.1.0",
-  "description": "Discard desktop client",
+  "description": "Sloth Voice desktop client",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {

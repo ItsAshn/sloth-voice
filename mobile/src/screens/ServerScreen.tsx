@@ -14,18 +14,10 @@ import { useStore } from "../store/useStore";
 import { fetchChannels, configureApi } from "../api/server";
 import type { RootStackParamList } from "../../App";
 import type { Channel } from "../types";
+import { C } from "../theme/colors";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Server">;
 type Route = RouteProp<RootStackParamList, "Server">;
-
-const C = {
-  bg: "#050508",
-  surface: "#0c0d17",
-  low: "#111228",
-  brand: "#7b72f0",
-  text: "#c9cef0",
-  muted: "#4c5280",
-};
 
 export default function ServerScreen() {
   const nav = useNavigation<Nav>();

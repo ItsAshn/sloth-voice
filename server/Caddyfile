@@ -1,6 +1,6 @@
-# Discard server — Caddy reverse proxy
+# Sloth Voice server — Caddy reverse proxy
 #
-# Replace "discard.example.com" with your actual domain before use.
+# Replace "sloth-voice.example.com" with your actual domain before use.
 #
 # What this handles:
 #   ✔  HTTP → HTTPS redirect (automatic)
@@ -15,6 +15,6 @@
 #
 # See the README for full setup instructions.
 
-discard.example.com {
+sloth-voice.example.com {
     reverse_proxy localhost:5000
 }

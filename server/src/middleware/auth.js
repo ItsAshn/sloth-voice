@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { getDb } = require("../db/database");
 
-const JWT_SECRET = process.env.JWT_SECRET || "discard_server_secret_change_me";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 /**
  * Default permissions for plain members (no custom role assigned).

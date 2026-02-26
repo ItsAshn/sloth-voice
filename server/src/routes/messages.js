@@ -67,6 +67,10 @@ router.post(
     const { content } = req.body;
     if (!content?.trim())
       return res.status(400).json({ error: "content required" });
+    if (content.length > 4000)
+      return res
+        .status(400)
+        .json({ error: "Message too long (max 4000 characters)" });
 
     const db = getDb();
     // Fetch display_name from users table

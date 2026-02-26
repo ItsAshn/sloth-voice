@@ -26,6 +26,12 @@ export default function AuthModal({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  useEffect(() => {
     fetchServerInfo(serverUrl)
       .then((info) => setPasswordProtected(info.passwordProtected))
       .catch(() => {});
@@ -64,8 +70,8 @@ export default function AuthModal({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-box max-w-sm">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box max-w-sm" onClick={(e) => e.stopPropagation()}>
         <p className="text-text-muted text-[10px] tracking-widest uppercase mb-1">
           {mode === "login" ? "// sign in to" : "// register on"}
         </p>

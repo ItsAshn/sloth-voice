@@ -19,6 +19,7 @@ export default function ServerList() {
   const [showAdd, setShowAdd] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   const handleSelect = (server: SavedServer) => {
     if (activeServer?.id !== server.id) {
@@ -26,7 +27,7 @@ export default function ServerList() {
     }
     // Clear badge when user opens this server
     clearMentions(server.id);
-    window.discard?.clearMentions?.(server.id).catch(() => {});
+    window.slothVoice?.clearMentions?.(server.id).catch(() => {});
     navigate(`/server/${server.id}`);
   };
 
@@ -39,19 +40,19 @@ export default function ServerList() {
     setShowAdd(false);
     handleSelect(server);
     // Confirm with persisted list from electron-store (no-op in web mode)
-    const updated = await window.discard?.getServers();
+    const updated = await window.slothVoice?.getServers();
     if (updated) setSavedServers(updated);
   };
 
-  const handleRemove = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemove = async (id: string) => {
     // Optimistically remove immediately
     setSavedServers(savedServers.filter((s) => s.id !== id));
     if (activeServer?.id === id) {
       setActiveServer(null);
       navigate("/");
     }
-    await window.discard?.removeServer(id);
+    setConfirmRemove(null);
+    await window.slothVoice?.removeServer(id);
   };
 
   return (
@@ -110,13 +111,33 @@ export default function ServerList() {
                   {badgeCount > 99 ? "99+" : badgeCount}
                 </span>
               )}
-              <button
-                onClick={(e) => handleRemove(s.id, e)}
-                className="absolute -top-1 -right-0.5 hidden group-hover:flex w-3.5 h-3.5 bg-danger
-                           rounded-sm items-center justify-center text-white text-[9px] leading-none"
-              >
-                ×
-              </button>
+              {confirmRemove === s.id ? (
+                <div className="absolute -top-1 -right-0.5 flex gap-0.5 z-20">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRemove(s.id); }}
+                    title="confirm remove"
+                    className="w-4 h-4 bg-danger rounded-sm flex items-center justify-center text-white text-[9px] leading-none"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmRemove(null); }}
+                    title="cancel"
+                    className="w-4 h-4 bg-surface-highest rounded-sm flex items-center justify-center text-text-muted text-[9px] leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmRemove(s.id); }}
+                  title="remove server"
+                  className="absolute -top-1 -right-0.5 hidden group-hover:flex w-4 h-4 bg-danger
+                             rounded-sm items-center justify-center text-white text-[9px] leading-none"
+                >
+                  ×
+                </button>
+              )}
             </div>
           );
         })}

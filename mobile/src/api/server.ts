@@ -50,6 +50,7 @@ export async function login(
 export async function fetchServerInfo(serverUrl: string) {
   const res = await axios.get(
     `${serverUrl.replace(/\/$/, "")}/api/server/info`,
+    { timeout: 8000 },
   );
   return res.data as {
     name: string;

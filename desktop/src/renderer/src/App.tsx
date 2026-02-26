@@ -9,7 +9,7 @@ export default function App() {
   const setSavedServers = useStore((s) => s.setSavedServers);
 
   useEffect(() => {
-    window.discard?.getServers().then(setSavedServers).catch(console.error);
+    window.slothVoice?.getServers().then(setSavedServers).catch(console.error);
   }, [setSavedServers]);
 
   // Keep background notification sockets alive in the main process

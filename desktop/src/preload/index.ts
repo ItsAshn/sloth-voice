@@ -9,7 +9,7 @@ interface SavedServer {
   addedAt: number;
 }
 
-const discardAPI = {
+const slothVoiceAPI = {
   // Server list — persisted in electron-store
   getServers: (): Promise<SavedServer[]> => ipcRenderer.invoke("servers:get"),
   addServer: (server: SavedServer): Promise<SavedServer[]> =>
@@ -96,12 +96,12 @@ const discardAPI = {
 
 if (process.contextIsolated) {
   contextBridge.exposeInMainWorld("electron", electronAPI);
-  contextBridge.exposeInMainWorld("discard", discardAPI);
+  contextBridge.exposeInMainWorld("slothVoice", slothVoiceAPI);
 } else {
   // @ts-ignore
   window.electron = electronAPI;
   // @ts-ignore
-  window.discard = discardAPI;
+  window.slothVoice = slothVoiceAPI;
 }
 
-export type DiscardAPI = typeof discardAPI;
+export type SlothVoiceAPI = typeof slothVoiceAPI;

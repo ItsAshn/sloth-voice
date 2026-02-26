@@ -56,7 +56,7 @@ export default function App() {
           <Stack.Screen
             name="Home"
             component={HomeScreen}
-            options={{ title: "discard" }}
+            options={{ title: "Sloth Voice" }}
           />
           <Stack.Screen
             name="Auth"

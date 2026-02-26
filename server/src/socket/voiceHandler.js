@@ -23,6 +23,8 @@
  */
 
 const { getWorker } = require("../mediasoup/worker");
+const jwt = require("jsonwebtoken");
+const { getDb } = require("../db/database");
 
 // channelId -> { router, peers: Map<socketId, PeerState> }
 const voiceRooms = new Map();
@@ -61,12 +63,29 @@ function registerVoiceHandlers(io, socket) {
   // existing peers never try to consume a peer before it has a producer.
   socket.on("voice:join", async ({ channelId, userId, username }, callback) => {
     try {
+      // Verify the socket's auth token before allowing voice join
+      const token = socket.handshake?.auth?.token;
+      if (!token) return callback({ error: "Authentication required" });
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        const db = getDb();
+        const member = db
+          .prepare("SELECT 1 FROM server_members WHERE user_id = ?")
+          .get(payload.id);
+        if (!member) return callback({ error: "Not a server member" });
+        // Use the verified identity instead of trusting client-supplied values
+        userId = payload.id;
+        username = payload.username;
+      } catch {
+        return callback({ error: "Invalid or expired token" });
+      }
+
       const room = await getOrCreateRoom(channelId);
       socket.join(`voice:${channelId}`);
 
       room.peers.set(socket.id, {
-        userId: userId ?? socket.id,
-        username: username ?? "Unknown",
+        userId,
+        username,
         transports: new Map(), // transportId -> transport (has ._direction)
         producers: new Map(), // producerId  -> producer
         consumers: new Map(), // consumerId  -> consumer

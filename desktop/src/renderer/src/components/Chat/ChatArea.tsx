@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useStore } from "../../store/useStore";
 import { fetchMessages, configureApi } from "../../api/server";
 import { useSocket } from "../../hooks/useSocket";
@@ -9,17 +9,34 @@ export default function ChatArea() {
   const { activeServer, activeChannel, sessions, messages, setMessages } =
     useStore();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const [loading, setLoading] = useState(false);
   const session = activeServer ? sessions[activeServer.id] : undefined;
   useSocket(activeServer?.url ?? "", session?.token);
 
   useEffect(() => {
     if (!activeServer || !activeChannel || !session) return;
     configureApi(activeServer.url, session.token);
-    fetchMessages(activeChannel.id).then(setMessages).catch(console.error);
+    setLoading(true);
+    fetchMessages(activeChannel.id)
+      .then(setMessages)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [activeChannel, activeServer, session, setMessages]);
 
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    // Consider "near bottom" if within 150px of the bottom
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  }, []);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only auto-scroll if user is near the bottom, or on initial load
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   if (!activeChannel) return null;
@@ -35,12 +52,20 @@ export default function ChatArea() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
-        {messages.length === 0 && (
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5"
+      >
+        {loading ? (
+          <p className="text-text-muted text-xs text-center mt-10 font-mono tracking-widest animate-pulse">
+            loading messages…
+          </p>
+        ) : messages.length === 0 ? (
           <p className="text-text-muted text-xs text-center mt-10 font-mono tracking-widest">
             no messages yet — say something
           </p>
-        )}
+        ) : null}
         {messages.map((msg) => (
           <MessageItem
             key={msg.id}

@@ -114,10 +114,7 @@ export default component$(() => {
               download
             </a>
             <a
-              href="https://github.com/ItsAshn/discard"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="hover:text-text transition-colors flex items-center gap-1.5"
+              href="https://github.com/ItsAshn/sloth-voice"
             >
               <IconGithub />
               <span class="hidden sm:inline">github</span>
@@ -322,17 +319,14 @@ export default component$(() => {
             run your own instance in under two minutes.
           </p>
           <pre class="bg-surface border border-border p-4 font-mono text-xs text-text overflow-x-auto leading-relaxed">
-            {`git clone https://github.com/ItsAshn/discard-server
-cd discard-server
+            {`git clone https://github.com/ItsAshn/sloth-voice-server
+cd sloth-voice-server
 cp .env.example .env
 # set JWT_SECRET in .env
 docker compose up -d`}
           </pre>
           <a
-            href="https://github.com/ItsAshn/discard-server"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-2 text-sm text-dim hover:text-text transition-colors"
+            href="https://github.com/ItsAshn/sloth-voice-server"
           >
             <IconGithub />→ server repo &amp; docs
           </a>
@@ -345,10 +339,7 @@ docker compose up -d`}
           <span>sloth / voice</span>
           <div class="flex items-center gap-6">
             <a
-              href="https://github.com/ItsAshn/discard"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="hover:text-text transition-colors"
+              href="https://github.com/ItsAshn/sloth-voice"
             >
               github
             </a>

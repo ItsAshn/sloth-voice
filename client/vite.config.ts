@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     proxy: {
       "/relay": {
-        target: "http://localhost:4000",
+        target: "http://localhost:5000",
         rewrite: (path) => path.replace(/^\/relay/, ""),
         changeOrigin: true,
       },

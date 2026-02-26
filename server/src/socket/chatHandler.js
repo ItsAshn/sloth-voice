@@ -139,6 +139,7 @@ function registerChatHandlers(io, socket) {
     "message:send",
     ({ channelId, content, authorId, authorUsername }) => {
       if (!channelId || !content?.trim() || !authorId) return;
+      if (content.length > 4000) return;
 
       // Enforce send_messages permission
       const userInfo = getUserPermissions(authorId);

@@ -13,9 +13,16 @@ export default function ExportModal({ onClose }: Props) {
   const [tab, setTab] = useState<"qr" | "import">("qr");
   const [importText, setImportText] = useState("");
   const [status, setStatus] = useState("");
+  const [statusIsError, setStatusIsError] = useState(false);
 
   useEffect(() => {
-    window.discard.exportServers().then(async (json) => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    window.slothVoice.exportServers().then(async (json) => {
       setJsonData(json);
       try {
         const url = await QRCode.toDataURL(json, {
@@ -33,7 +40,7 @@ export default function ExportModal({ onClose }: Props) {
 
   const handleImport = async () => {
     try {
-      const result = await window.discard.importServers(importText.trim());
+      const result = await window.slothVoice.importServers(importText.trim());
       // IPC returns { ok, servers?, error? }
       const res = result as unknown as {
         ok: boolean;
@@ -43,22 +50,26 @@ export default function ExportModal({ onClose }: Props) {
       if (res.ok && res.servers) {
         setSavedServers(res.servers);
         setStatus(`imported ${res.servers.length} server(s).`);
+        setStatusIsError(false);
       } else {
         setStatus(`error: ${res.error ?? "import failed"}`);
+        setStatusIsError(true);
       }
     } catch {
       setStatus("invalid data. paste exported json.");
+      setStatusIsError(true);
     }
   };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(jsonData);
     setStatus("Copied to clipboard!");
+    setStatusIsError(false);
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-box max-w-md">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box max-w-md" onClick={(e) => e.stopPropagation()}>
         <p className="text-text-muted text-[10px] tracking-widest uppercase mb-1">
           // data
         </p>
@@ -117,7 +128,7 @@ export default function ExportModal({ onClose }: Props) {
         )}
 
         {status && (
-          <p className="text-success text-xs mt-3 text-center font-mono">
+          <p className={`${statusIsError ? "text-danger" : "text-success"} text-xs mt-3 text-center font-mono`}>
             {status}
           </p>
         )}

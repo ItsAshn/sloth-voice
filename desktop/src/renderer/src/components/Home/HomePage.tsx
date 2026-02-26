@@ -9,9 +9,9 @@ export default function HomePage() {
       <div className="flex flex-1 flex-col items-center justify-center gap-6 text-text-muted bg-surface-high px-8">
         <div className="font-mono text-left space-y-1 text-sm">
           <p className="text-text-muted">
-            <span className="text-brand-primary">$</span> discard --version
+            <span className="text-brand-primary">$</span> sloth-voice --version
           </p>
-          <p className="text-text-normal">discard v1.0.0</p>
+          <p className="text-text-normal">sloth-voice v1.0.0</p>
           <p className="text-text-muted mt-2">
             <span className="text-brand-primary">$</span> server list
           </p>

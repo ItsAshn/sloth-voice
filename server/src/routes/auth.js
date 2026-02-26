@@ -5,7 +5,39 @@ const { v4: uuidv4 } = require("uuid");
 const { getDb } = require("../db/database");
 const { requireAuth } = require("../middleware/auth");
 
-const JWT_SECRET = process.env.JWT_SECRET || "discard_server_secret_change_me";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Simple in-memory rate limiter for auth endpoints (per IP)
+const authAttempts = new Map(); // ip -> { count, resetAt }
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_MAX = 20; // max attempts per window
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress;
+  const now = Date.now();
+  const entry = authAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    authAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return next();
+  }
+  if (entry.count >= RATE_LIMIT_MAX) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    res.set("Retry-After", String(retryAfter));
+    return res
+      .status(429)
+      .json({ error: "Too many attempts. Please try again later." });
+  }
+  entry.count++;
+  next();
+}
+
+// Periodically clean up expired entries (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of authAttempts) {
+    if (now > entry.resetAt) authAttempts.delete(ip);
+  }
+}, 5 * 60 * 1000).unref();
 
 // Helper
 function signToken(user) {
@@ -15,10 +47,22 @@ function signToken(user) {
 }
 
 // POST /api/auth/register
-router.post("/register", async (req, res) => {
+router.post("/register", rateLimit, async (req, res) => {
   const { username, password, displayName, serverPassword } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });
+  if (username.length < 2 || username.length > 32)
+    return res
+      .status(400)
+      .json({ error: "Username must be 2-32 characters" });
+  if (!/^[\w.\-]+$/.test(username))
+    return res
+      .status(400)
+      .json({ error: "Username may only contain letters, numbers, underscores, hyphens, and dots" });
+  if (password.length < 6)
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 6 characters" });
 
   // Enforce optional server password
   const required =
@@ -65,7 +109,7 @@ router.post("/register", async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post("/login", async (req, res) => {
+router.post("/login", rateLimit, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });

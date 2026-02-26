@@ -148,17 +148,30 @@ export default function ChannelList() {
                 onChange={(e) => setNewChannelName(e.target.value)}
               />
               <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNewChannelType(
-                      newChannelType === "text" ? "voice" : "text",
-                    )
-                  }
-                  className="btn-ghost text-xs flex-1"
-                >
-                  {newChannelType === "text" ? "text" : "voice"}
-                </button>
+                <div className="flex flex-1 bg-surface-lowest rounded border border-surface-highest overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelType("text")}
+                    className={`flex-1 py-1 text-[10px] font-mono transition-colors ${
+                      newChannelType === "text"
+                        ? "bg-brand-primary text-white"
+                        : "text-text-muted hover:text-text-normal"
+                    }`}
+                  >
+                    text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelType("voice")}
+                    className={`flex-1 py-1 text-[10px] font-mono transition-colors ${
+                      newChannelType === "voice"
+                        ? "bg-brand-primary text-white"
+                        : "text-text-muted hover:text-text-normal"
+                    }`}
+                  >
+                    voice
+                  </button>
+                </div>
                 <button
                   type="submit"
                   disabled={creating}

@@ -15,19 +15,10 @@ import type { RouteProp } from "@react-navigation/native";
 import { useStore } from "../store/useStore";
 import { login, register, fetchServerInfo } from "../api/server";
 import type { RootStackParamList } from "../../App";
+import { C } from "../theme/colors";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Auth">;
 type Route = RouteProp<RootStackParamList, "Auth">;
-
-const C = {
-  bg: "#050508",
-  surface: "#0c0d17",
-  low: "#111228",
-  brand: "#7b72f0",
-  text: "#c9cef0",
-  muted: "#4c5280",
-  danger: "#e05a5a",
-};
 
 export default function AuthScreen() {
   const nav = useNavigation<Nav>();

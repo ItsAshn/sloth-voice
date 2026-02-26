@@ -39,7 +39,7 @@ app.use("/api/roles", roleRoutes);
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    name: process.env.SERVER_NAME || "Discard Server",
+    name: process.env.SERVER_NAME || "Sloth Voice Server",
     version: "1.0.0",
     passwordProtected: !!(
       process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
@@ -59,9 +59,22 @@ io.on("connection", (socket) => {
 const PORT = parseInt(process.env.SERVER_PORT || "5000", 10);
 const RTC_MIN = parseInt(process.env.RTC_MIN_PORT || "40000", 10);
 const RTC_MAX = parseInt(process.env.RTC_MAX_PORT || "49999", 10);
-const SERVER_NAME = process.env.SERVER_NAME || "My Discard Server";
+const SERVER_NAME = process.env.SERVER_NAME || "My Sloth Voice Server";
 
 async function start() {
+  // Fail fast if JWT_SECRET is not configured — the default is insecure.
+  if (
+    !process.env.JWT_SECRET ||
+    process.env.JWT_SECRET === "change_this_to_a_long_random_secret"
+  ) {
+    console.error(
+      "\n[!] JWT_SECRET is not set (or still the placeholder value).\n" +
+        "    Set a strong random secret in your .env file or environment.\n" +
+        "    Example:  JWT_SECRET=$(openssl rand -base64 48)\n",
+    );
+    process.exit(1);
+  }
+
   initDb();
 
   // Register clean-up hooks before opening ports so Ctrl-C removes them.
@@ -90,9 +103,23 @@ async function start() {
   await createWorker();
 
   httpServer.listen(PORT, () => {
-    console.log(`\n Discard Server "${SERVER_NAME}" running on port ${PORT}`);
+    console.log(`\n Sloth Voice Server "${SERVER_NAME}" running on port ${PORT}`);
     console.log(`   Health: http://localhost:${PORT}/health\n`);
   });
+
+  // Graceful shutdown — close HTTP + Socket.IO so in-flight requests finish
+  const shutdown = (signal) => {
+    console.log(`\n[${signal}] Shutting down gracefully…`);
+    io.close();
+    httpServer.close(() => {
+      console.log("[+] HTTP server closed.");
+      process.exit(0);
+    });
+    // Force exit after 5 s if connections hang
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 start().catch(console.error);

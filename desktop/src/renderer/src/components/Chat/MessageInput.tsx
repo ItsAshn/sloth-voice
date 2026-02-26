@@ -65,7 +65,10 @@ export default function MessageInput({ channelId, channelName }: Props) {
       });
       setContent("");
       setSendError(null);
-      inputRef.current?.focus();
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
+        inputRef.current.focus();
+      }
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response
         ?.status;
@@ -123,6 +126,13 @@ export default function MessageInput({ channelId, channelName }: Props) {
     }
   };
 
+  const autoResize = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, []);
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
@@ -136,8 +146,9 @@ export default function MessageInput({ channelId, channelName }: Props) {
         const before = val.slice(0, cursor);
         setAtIndex(before.lastIndexOf("@"));
       }
+      requestAnimationFrame(autoResize);
     },
-    [],
+    [autoResize],
   );
 
   const insertMention = (username: string) => {

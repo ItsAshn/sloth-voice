@@ -17,7 +17,7 @@ export function useSocket(serverUrl: string, token: string | undefined) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      if (activeChannel) socket.emit("join-channel", activeChannel.id);
+      if (activeChannel) socket.emit("channel:join", activeChannel.id);
     });
 
     socket.on("message:new", (msg: Message) => addMessage(msg));
@@ -31,7 +31,7 @@ export function useSocket(serverUrl: string, token: string | undefined) {
   useEffect(() => {
     const s = socketRef.current;
     if (!s?.connected || !activeChannel) return;
-    s.emit("join-channel", activeChannel.id);
+    s.emit("channel:join", activeChannel.id);
   }, [activeChannel]);
 
   return socketRef;

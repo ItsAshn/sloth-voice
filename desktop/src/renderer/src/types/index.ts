@@ -83,7 +83,7 @@ export interface ServerSession {
   user: User;
 }
 
-export interface DiscardAPI {
+export interface SlothVoiceAPI {
   getServers: () => Promise<SavedServer[]>;
   addServer: (
     server: Omit<SavedServer, "id" | "addedAt">,
@@ -99,6 +99,6 @@ export interface DiscardAPI {
 
 declare global {
   interface Window {
-    discard: DiscardAPI;
+    slothVoice: SlothVoiceAPI;
   }
 }

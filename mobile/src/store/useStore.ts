@@ -9,7 +9,7 @@ import type {
   ServerSession,
 } from "../types";
 
-const SERVERS_KEY = "discard:servers";
+const SERVERS_KEY = "sloth-voice:servers";
 
 interface StoreState {
   savedServers: SavedServer[];
@@ -107,7 +107,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
   messages: [],
   setMessages: (messages) => set({ messages }),
-  addMessage: (message) => set((s) => ({ messages: [...s.messages, message] })),
+  addMessage: (message) =>
+    set((s) => {
+      if (s.messages.some((m) => m.id === message.id)) return s;
+      return { messages: [...s.messages, message] };
+    }),
 
   members: [],
   setMembers: (members) => set({ members }),

@@ -115,7 +115,7 @@ async function openPorts({ httpPort, rtcMinPort, rtcMaxPort }) {
       client,
       httpPort,
       "TCP",
-      "Discard Server HTTP/WS",
+      "Sloth Voice Server HTTP/WS",
     );
     if (!probeOk) {
       console.log(
@@ -132,7 +132,7 @@ async function openPorts({ httpPort, rtcMinPort, rtcMaxPort }) {
     );
     let failed = 0;
     for (let port = effectiveRtcMin; port <= effectiveRtcMax; port++) {
-      const ok = await mapPort(client, port, "UDP", `Discard RTC ${port}`);
+      const ok = await mapPort(client, port, "UDP", `Sloth Voice RTC ${port}`);
       if (!ok) failed++;
     }
     if (failed > 0) {

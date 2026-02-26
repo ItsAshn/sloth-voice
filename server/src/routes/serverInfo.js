@@ -6,7 +6,7 @@ const {
   requirePermission,
 } = require("../middleware/auth");
 const { getDb } = require("../db/database");
-const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 
 // GET /api/server/info — public info shown before joining
 router.get("/info", (_req, res) => {
@@ -15,9 +15,9 @@ router.get("/info", (_req, res) => {
     .prepare("SELECT value FROM server_settings WHERE key = 'name'")
     .get();
   return res.json({
-    name: nameSetting?.value || process.env.SERVER_NAME || "Discard Server",
+    name: nameSetting?.value || process.env.SERVER_NAME || "Sloth Voice Server",
     description:
-      process.env.SERVER_DESCRIPTION || "A locally-hosted Discard server",
+      process.env.SERVER_DESCRIPTION || "A locally-hosted Sloth Voice server",
     // Tell clients whether a password is required, without revealing it
     passwordProtected: !!(
       process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
@@ -71,8 +71,8 @@ router.post(
     const { maxUses, expiresInHours } = req.body;
     const db = getDb();
 
-    // Generate a short 8-char alphanumeric code
-    const code = uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase();
+    // Generate a cryptographically random 8-char alphanumeric code
+    const code = crypto.randomBytes(6).toString("base64url").slice(0, 8).toUpperCase();
     const expiresAt =
       expiresInHours && expiresInHours > 0
         ? Math.floor(Date.now() / 1000) + Math.round(expiresInHours * 3600)

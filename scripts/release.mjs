@@ -82,4 +82,4 @@ run(`git push origin ${tag}`);
 console.log(`\nDone! CI will now:`);
 console.log(`  • build the desktop app (Win / macOS / Linux)`);
 console.log(`  • create a GitHub Release with installers + update manifests`);
-console.log(`  • tag ItsAshn/discard-server@${tag} → Docker image publish`);
+console.log(`  • tag ItsAshn/sloth-voice-server@${tag} → Docker image publish`);
