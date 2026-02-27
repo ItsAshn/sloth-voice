@@ -7,9 +7,33 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────
+  # Decide whether to build installers
+  # Artifacts are only built for minor/major bumps (patch == 0)
+  # e.g. v0.7.0 → build, v0.6.1 → skip
+  # ─────────────────────────────────────────────
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      build_artifacts: ${{ steps.check.outputs.build_artifacts }}
+    steps:
+      - id: check
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          if [ "$PATCH" = "0" ]; then
+            echo "build_artifacts=true" >> "$GITHUB_OUTPUT"
+            echo "Patch is 0 — building installer artifacts"
+          else
+            echo "build_artifacts=false" >> "$GITHUB_OUTPUT"
+            echo "Patch release ($VERSION) — skipping installer artifacts"
+          fi
+
+  # ─────────────────────────────────────────────
   # Build desktop for all three platforms
   # ─────────────────────────────────────────────
   build-windows:
+    needs: check-version
+    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +70,8 @@ jobs:
             desktop/dist/latest.yml
 
   build-macos:
+    needs: check-version
+    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +107,8 @@ jobs:
             desktop/dist/latest-mac.yml
 
   build-linux:
+    needs: check-version
+    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,15 +144,18 @@ jobs:
             desktop/dist/latest-linux.yml
 
   # ─────────────────────────────────────────────
-  # Create GitHub Release and attach all artifacts
+  # Create GitHub Release and attach artifacts (if any)
   # ─────────────────────────────────────────────
   github-release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [check-version, build-windows, build-macos, build-linux]
+    if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        if: needs.check-version.outputs.build_artifacts == 'true'
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
@@ -132,13 +163,19 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_ARTIFACTS: ${{ needs.check-version.outputs.build_artifacts }}
         run: |
-          # Delete any existing release for this tag (e.g. a GitHub-auto-created draft)
           gh release delete "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --yes 2>/dev/null || true
-          gh release create "$GITHUB_REF_NAME" artifacts/** \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
-
+          if [ "$BUILD_ARTIFACTS" = "true" ]; then
+            gh release create "$GITHUB_REF_NAME" artifacts/** \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
