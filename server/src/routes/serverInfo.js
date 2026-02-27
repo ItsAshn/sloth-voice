@@ -72,7 +72,11 @@ router.post(
     const db = getDb();
 
     // Generate a cryptographically random 8-char alphanumeric code
-    const code = crypto.randomBytes(6).toString("base64url").slice(0, 8).toUpperCase();
+    const code = crypto
+      .randomBytes(6)
+      .toString("base64url")
+      .slice(0, 8)
+      .toUpperCase();
     const expiresAt =
       expiresInHours && expiresInHours > 0
         ? Math.floor(Date.now() / 1000) + Math.round(expiresInHours * 3600)

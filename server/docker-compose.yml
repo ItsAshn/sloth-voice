@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/itsashn/sloth-voice-server:v0.3.2
+    image: ghcr.io/itsashn/discard-server:v0.4.7
     build:
       context: .
       dockerfile: Dockerfile
@@ -26,8 +26,6 @@ services:
       RTC_MAX_PORT: ${RTC_MAX_PORT:-40099}
       MEDIASOUP_LOG_LEVEL: ${MEDIASOUP_LOG_LEVEL:-warn}
       IS_PUBLIC: ${IS_PUBLIC:-false}
-      RELAY_URL: ${RELAY_URL:-}
-      SERVER_OWNER_TOKEN: ${SERVER_OWNER_TOKEN:-}
     volumes:
       # Persist the SQLite database across container restarts
       - server_data:/data

@@ -16,6 +16,7 @@ export default defineConfig({
     resolve: {
       alias: {
         "@": path.resolve("src/renderer/src"),
+        "@sloth-voice/shared": path.resolve("../packages/shared/src"),
       },
     },
     css: {

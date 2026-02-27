@@ -114,14 +114,20 @@ export default function ServerList() {
               {confirmRemove === s.id ? (
                 <div className="absolute -top-1 -right-0.5 flex gap-0.5 z-20">
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleRemove(s.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemove(s.id);
+                    }}
                     title="confirm remove"
                     className="w-4 h-4 bg-danger rounded-sm flex items-center justify-center text-white text-[9px] leading-none"
                   >
                     ✓
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmRemove(null); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmRemove(null);
+                    }}
                     title="cancel"
                     className="w-4 h-4 bg-surface-highest rounded-sm flex items-center justify-center text-text-muted text-[9px] leading-none"
                   >
@@ -130,7 +136,10 @@ export default function ServerList() {
                 </div>
               ) : (
                 <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmRemove(s.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmRemove(s.id);
+                  }}
                   title="remove server"
                   className="absolute -top-1 -right-0.5 hidden group-hover:flex w-4 h-4 bg-danger
                              rounded-sm items-center justify-center text-white text-[9px] leading-none"

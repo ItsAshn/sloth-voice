@@ -16,7 +16,9 @@ export default function ExportModal({ onClose }: Props) {
   const [statusIsError, setStatusIsError] = useState(false);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
@@ -128,7 +130,9 @@ export default function ExportModal({ onClose }: Props) {
         )}
 
         {status && (
-          <p className={`${statusIsError ? "text-danger" : "text-success"} text-xs mt-3 text-center font-mono`}>
+          <p
+            className={`${statusIsError ? "text-danger" : "text-success"} text-xs mt-3 text-center font-mono`}
+          >
             {status}
           </p>
         )}
