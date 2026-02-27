@@ -103,7 +103,9 @@ async function start() {
   await createWorker();
 
   httpServer.listen(PORT, () => {
-    console.log(`\n Sloth Voice Server "${SERVER_NAME}" running on port ${PORT}`);
+    console.log(
+      `\n Sloth Voice Server "${SERVER_NAME}" running on port ${PORT}`,
+    );
     console.log(`   Health: http://localhost:${PORT}/health\n`);
   });
 

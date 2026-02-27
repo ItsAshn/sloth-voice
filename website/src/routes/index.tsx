@@ -113,9 +113,7 @@ export default component$(() => {
             <a href="#download" class="hover:text-text transition-colors">
               download
             </a>
-            <a
-              href="https://github.com/ItsAshn/sloth-voice"
-            >
+            <a href="https://github.com/ItsAshn/sloth-voice">
               <IconGithub />
               <span class="hidden sm:inline">github</span>
             </a>
@@ -325,9 +323,7 @@ cp .env.example .env
 # set JWT_SECRET in .env
 docker compose up -d`}
           </pre>
-          <a
-            href="https://github.com/ItsAshn/sloth-voice-server"
-          >
+          <a href="https://github.com/ItsAshn/sloth-voice-server">
             <IconGithub />→ server repo &amp; docs
           </a>
         </section>
@@ -338,11 +334,7 @@ docker compose up -d`}
         <div class="max-w-3xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-muted font-mono">
           <span>sloth / voice</span>
           <div class="flex items-center gap-6">
-            <a
-              href="https://github.com/ItsAshn/sloth-voice"
-            >
-              github
-            </a>
+            <a href="https://github.com/ItsAshn/sloth-voice">github</a>
             <span>built with qwik</span>
           </div>
         </div>

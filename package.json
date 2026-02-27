@@ -7,8 +7,7 @@
     "server": "cd server && npm run dev",
     "desktop": "cd desktop && npm run dev",
     "mobile": "cd mobile && npx expo start",
-    "client": "cd client && npm run dev",
-    "install:all": "npm i --prefix server && npm i --prefix desktop && npm i --prefix mobile && npm i --prefix client",
+    "install:all": "npm i --prefix server && npm i --prefix desktop && npm i --prefix mobile",
     "dev": "npx concurrently -n server,desktop -c blue,green \"npm run server\" \"npm run desktop\"",
     "release": "node scripts/release.mjs"
   }

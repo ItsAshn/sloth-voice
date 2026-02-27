@@ -60,8 +60,8 @@ interface SlothVoiceNotificationBridge {
 /** Guard: returns the bridge only when running inside Electron. */
 function getBridge(): SlothVoiceNotificationBridge | null {
   return (
-    (window as unknown as { slothVoice?: SlothVoiceNotificationBridge }).slothVoice ??
-    null
+    (window as unknown as { slothVoice?: SlothVoiceNotificationBridge })
+      .slothVoice ?? null
   );
 }
 

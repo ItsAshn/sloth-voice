@@ -16,6 +16,9 @@ export default defineConfig({
     resolve: {
       alias: {
         "@": path.resolve("src/renderer/src"),
+        "@sloth-voice/shared": path.resolve("../packages/shared/src"),
+        // Anchor axios to desktop's node_modules so files in packages/shared/ resolve it correctly
+        axios: path.resolve("node_modules/axios"),
       },
     },
     css: {

@@ -32,12 +32,15 @@ function rateLimit(req, res, next) {
 }
 
 // Periodically clean up expired entries (every 5 minutes)
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of authAttempts) {
-    if (now > entry.resetAt) authAttempts.delete(ip);
-  }
-}, 5 * 60 * 1000).unref();
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [ip, entry] of authAttempts) {
+      if (now > entry.resetAt) authAttempts.delete(ip);
+    }
+  },
+  5 * 60 * 1000,
+).unref();
 
 // Helper
 function signToken(user) {
@@ -52,13 +55,14 @@ router.post("/register", rateLimit, async (req, res) => {
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });
   if (username.length < 2 || username.length > 32)
-    return res
-      .status(400)
-      .json({ error: "Username must be 2-32 characters" });
+    return res.status(400).json({ error: "Username must be 2-32 characters" });
   if (!/^[\w.\-]+$/.test(username))
     return res
       .status(400)
-      .json({ error: "Username may only contain letters, numbers, underscores, hyphens, and dots" });
+      .json({
+        error:
+          "Username may only contain letters, numbers, underscores, hyphens, and dots",
+      });
   if (password.length < 6)
     return res
       .status(400)
