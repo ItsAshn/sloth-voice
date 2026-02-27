@@ -1,13 +1,13 @@
-name: Publish Docker image
+name: Publish Server Docker Image
 
 on:
   push:
     tags:
-      - "v*"
+      - "server-v*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag to build and publish (e.g. v1.2.3)"
+        description: "Version tag to build and publish (e.g. v0.5.0)"
         required: true
 
 env:
@@ -31,19 +31,19 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
           TAG="${{ inputs.version || github.ref_name }}"
-          VERSION_NUM=$(echo "$TAG" | sed 's/^[vV]//')
+          # Strip leading v/V and also strip "server-" prefix if present
+          VERSION_NUM=$(echo "$TAG" | sed 's/^server-//' | sed 's/^[vV]//')
           echo "Tag: $TAG  Version: $VERSION_NUM"
-          # Switch to main and apply version bumps there
           git fetch origin master
           git checkout master
-          # Update package.json version
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$VERSION_NUM';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
-          # Update docker-compose.yml image tag to pinned version
-          sed -i "s|image: ghcr.io/itsashn/sloth-voice-server:.*|image: ghcr.io/itsashn/sloth-voice-server:${TAG}|" docker-compose.yml
+          # Update server/package.json version
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('server/package.json'));p.version='$VERSION_NUM';fs.writeFileSync('server/package.json',JSON.stringify(p,null,2)+'\n')"
+          # Update server/docker-compose.yml image tag
+          sed -i "s|image: ghcr.io/itsashn/sloth-voice-server:.*|image: ghcr.io/itsashn/sloth-voice-server:v${VERSION_NUM}|" server/docker-compose.yml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json docker-compose.yml
-          git diff --staged --quiet || git commit -m "chore: bump versions to ${TAG} [skip ci]"
+          git add server/package.json server/docker-compose.yml
+          git diff --staged --quiet || git commit -m "chore: bump server to v${VERSION_NUM} [skip ci]"
           git push origin master
 
       - name: Log in to GitHub Container Registry
@@ -59,14 +59,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # always tag the latest release as :latest
             type=raw,value=latest
-            # version tags from a git tag push → :v1.2.3, :1.2
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            # version tag when triggered via workflow_dispatch
+            type=semver,pattern={{version}},value=${{ inputs.version || github.ref_name }}
             type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
-            # also tag the git SHA for traceability
             type=sha,prefix=sha-
 
       - name: Set up Docker Buildx
@@ -75,7 +70,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ github.workspace }}/server
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

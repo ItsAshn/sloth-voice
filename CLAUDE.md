@@ -1,10 +1,10 @@
 # Sloth Voice
 
-Self-hosted Discord alternative (chat + voice). Monorepo with Node.js server, Electron desktop app, React Native mobile app, and Qwik website.
+Self-hosted Discord alternative (chat + voice). Monorepo with Node.js server, Electron desktop app, and React Native mobile app.
 
 ## Goal
 
-The project should be easy to set up and run for non-technical users, with a focus on voice quality and low latency. The desktop app is the primary client, but web/mobile clients are also supported. The server can be self-hosted on any machine (Raspberry Pi, VPS, etc.) with minimal configuration.
+The project should be easy to set up and run for non-technical users, with a focus on voice quality and low latency. The desktop app is the primary client, but mobile is also supported. The server can be self-hosted on any machine (Raspberry Pi, VPS, etc.) with minimal configuration.
 
 ## Structure
 
@@ -12,7 +12,6 @@ The project should be easy to set up and run for non-technical users, with a foc
 server/          — Express + Socket.IO + mediasoup + SQLite
 desktop/         — Electron + React/TS (primary client)
 mobile/          — React Native + Expo
-website/         — Qwik SSR landing page
 packages/shared/ — Shared TypeScript types and API client (used by desktop + mobile)
 scripts/         — Release automation
 ```
@@ -35,7 +34,6 @@ cd server && docker compose up -d  # Docker deployment
 - **Backend**: Node.js 20+ (ES modules), Express, Socket.IO, mediasoup, SQLite (`--experimental-sqlite`)
 - **Desktop**: Electron 29, React 18, TypeScript, Tailwind, Zustand, electron-updater
 - **Mobile**: React Native 0.74, Expo 51, Zustand
-- **Website**: Qwik SSR, Vite, Tailwind
 - **Shared**: `packages/shared/` — TypeScript source consumed via path alias (no build step); both desktop (Vite alias) and mobile (Babel module-resolver + Metro watchFolders) resolve it
 - **Auth**: JWT + bcryptjs
 - **Voice**: mediasoup (server-side WebRTC), mediasoup-client (desktop/web)
@@ -52,11 +50,11 @@ Copy `server/.env.example` to `server/.env`. Key vars:
 
 ## CI/CD
 
-| Workflow              | Trigger                              | Action                                                                      |
-| --------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
-| `pr-build.yml`        | PR to `master`                       | Validates server deps + builds desktop (Windows + macOS) — no artifacts uploaded (free tier) |
-| `release.yml`         | Tag push `v*`                        | Multi-platform installers → GitHub Release → triggers server Docker publish |
-| `website-publish.yml` | Push to `master` touching `website/` | Publishes Docker image to GHCR                                              |
+| Workflow               | Trigger                                     | Action                                                                     |
+| ---------------------- | ------------------------------------------- | -------------------------------------------------------------------------- |
+| `pr-build.yml`         | PR to `master`                              | Validates server deps + builds desktop (Windows + macOS) — no artifacts uploaded (free tier) |
+| `release.yml`          | Tag push `v*`                               | Multi-platform desktop installers → GitHub Release                         |
+| `server-publish.yml`   | Tag push `server-v*` or `workflow_dispatch` | Builds and publishes server Docker image to GHCR                           |
 
 ## Key Gotchas
 

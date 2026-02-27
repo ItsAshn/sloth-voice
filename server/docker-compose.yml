@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/itsashn/discard-server:v0.4.7
+    image: ghcr.io/itsashn/sloth-voice-server:v0.4.7
     build:
       context: .
       dockerfile: Dockerfile
