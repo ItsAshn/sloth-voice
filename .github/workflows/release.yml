@@ -40,6 +40,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist-win
+          retention-days: 1
           path: |
             desktop/dist/*.exe
             desktop/dist/latest.yml
@@ -74,6 +75,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist-mac
+          retention-days: 1
           path: |
             desktop/dist/*.dmg
             desktop/dist/latest-mac.yml
@@ -108,6 +110,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist-linux
+          retention-days: 1
           path: |
             desktop/dist/*.AppImage
             desktop/dist/latest-linux.yml
