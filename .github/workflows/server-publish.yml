@@ -3,7 +3,7 @@ name: Publish Server Docker Image
 on:
   push:
     tags:
-      - "server-v*"
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
