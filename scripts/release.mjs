@@ -62,13 +62,12 @@ console.log(`\nReleasing ${tag}...\n`);
 // 1. Bump all package.json files
 bumpPackage("package.json", version);
 bumpPackage("desktop/package.json", version);
-bumpPackage("server/package.json", version);
-bumpPackage("client/package.json", version);
 bumpPackage("mobile/package.json", version);
+bumpPackage("packages/shared/package.json", version);
 
 // 2. Commit
 run(
-  `git add package.json desktop/package.json server/package.json client/package.json mobile/package.json`,
+  `git add package.json desktop/package.json mobile/package.json packages/shared/package.json`,
 );
 run(`git commit -m "chore: release ${tag}"`);
 
@@ -81,5 +80,5 @@ run(`git push origin ${tag}`);
 
 console.log(`\nDone! CI will now:`);
 console.log(`  • build the desktop app (Win / macOS / Linux)`);
-console.log(`  • create a GitHub Release with installers + update manifests`);
-console.log(`  • tag ItsAshn/sloth-voice-server@${tag} → Docker image publish`);
+console.log(`  • build the Android APK`);
+console.log(`  • create a GitHub Release with all installers + update manifests`);
