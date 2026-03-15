@@ -7,34 +7,32 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────
-  # Decide whether to build installers
-  # Artifacts are only built for minor/major bumps (patch == 0)
-  # e.g. v0.7.0 → build, v0.6.1 → skip
+  # Create the GitHub Release immediately so build
+  # jobs can upload files directly to it.
   # ─────────────────────────────────────────────
-  check-version:
+  create-release:
     runs-on: ubuntu-latest
-    outputs:
-      build_artifacts: ${{ steps.check.outputs.build_artifacts }}
+    permissions:
+      contents: write
     steps:
-      - id: check
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
-          if [ "$PATCH" = "0" ]; then
-            echo "build_artifacts=true" >> "$GITHUB_OUTPUT"
-            echo "Patch is 0 — building installer artifacts"
-          else
-            echo "build_artifacts=false" >> "$GITHUB_OUTPUT"
-            echo "Patch release ($VERSION) — skipping installer artifacts"
-          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --draft
 
   # ─────────────────────────────────────────────
-  # Build desktop for all three platforms
+  # Desktop builds — upload directly to the release
   # ─────────────────────────────────────────────
   build-windows:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
+    needs: create-release
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -61,18 +59,22 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --win
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-win
-          retention-days: 1
-          path: |
-            desktop/dist/*.exe
-            desktop/dist/latest.yml
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            desktop/dist/*.exe \
+            desktop/dist/latest.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
 
   build-macos:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
+    needs: create-release
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -98,18 +100,21 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --mac
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-mac
-          retention-days: 1
-          path: |
-            desktop/dist/*.dmg
-            desktop/dist/latest-mac.yml
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            desktop/dist/*.dmg \
+            desktop/dist/latest-mac.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
 
   build-linux:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
+    needs: create-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -135,47 +140,30 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --linux
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-linux
-          retention-days: 1
-          path: |
-            desktop/dist/*.AppImage
-            desktop/dist/latest-linux.yml
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            desktop/dist/*.AppImage \
+            desktop/dist/latest-linux.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
 
   # ─────────────────────────────────────────────
-  # Create GitHub Release and attach artifacts (if any)
+  # Publish the draft release once all builds done
   # ─────────────────────────────────────────────
-  github-release:
-    needs: [check-version, build-windows, build-macos, build-linux]
-    if: always() && !failure() && !cancelled()
+  publish-release:
+    needs: [build-windows, build-macos, build-linux]
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download artifacts
-        if: needs.check-version.outputs.build_artifacts == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create GitHub Release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_ARTIFACTS: ${{ needs.check-version.outputs.build_artifacts }}
         run: |
-          gh release delete "$GITHUB_REF_NAME" \
+          gh release edit "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --yes 2>/dev/null || true
-          if [ "$BUILD_ARTIFACTS" = "true" ]; then
-            gh release create "$GITHUB_REF_NAME" artifacts/** \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" \
-              --generate-notes
-          else
-            gh release create "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" \
-              --generate-notes
-          fi
+            --draft=false
