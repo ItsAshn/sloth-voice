@@ -23,6 +23,11 @@ export interface SlothVoiceAPI {
   openExternal: (url: string) => Promise<void>;
   clearMentions?: (serverId: string) => Promise<void>;
   getMentionBadge?: (serverId: string) => Promise<number>;
+  checkForUpdates: () => Promise<{
+    status: "ok" | "error" | "dev";
+    version?: string | null;
+    message?: string;
+  }>;
 }
 
 declare global {

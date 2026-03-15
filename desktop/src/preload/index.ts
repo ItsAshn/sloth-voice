@@ -92,6 +92,13 @@ const slothVoiceAPI = {
   getVersion: (): Promise<string> => ipcRenderer.invoke("app:version"),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
+
+  // Updater
+  checkForUpdates: (): Promise<{
+    status: "ok" | "error" | "dev";
+    version?: string | null;
+    message?: string;
+  }> => ipcRenderer.invoke("updater:check"),
 };
 
 if (process.contextIsolated) {

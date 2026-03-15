@@ -7,33 +7,9 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────
-  # Decide whether to build installers
-  # Artifacts are only built for minor/major bumps (patch == 0)
-  # e.g. v0.7.0 → build, v0.6.1 → skip
-  # ─────────────────────────────────────────────
-  check-version:
-    runs-on: ubuntu-latest
-    outputs:
-      build_artifacts: ${{ steps.check.outputs.build_artifacts }}
-    steps:
-      - id: check
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
-          if [ "$PATCH" = "0" ]; then
-            echo "build_artifacts=true" >> "$GITHUB_OUTPUT"
-            echo "Patch is 0 — building installer artifacts"
-          else
-            echo "build_artifacts=false" >> "$GITHUB_OUTPUT"
-            echo "Patch release ($VERSION) — skipping installer artifacts"
-          fi
-
-  # ─────────────────────────────────────────────
-  # Build desktop for all three platforms
+  # Desktop builds
   # ─────────────────────────────────────────────
   build-windows:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +35,8 @@ jobs:
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # GH_TOKEN lets electron-builder publish to GitHub Releases directly
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist -- --win
 
       - uses: actions/upload-artifact@v4
@@ -70,8 +48,6 @@ jobs:
             desktop/dist/latest.yml
 
   build-macos:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +72,7 @@ jobs:
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist -- --mac
 
       - uses: actions/upload-artifact@v4
@@ -107,8 +84,6 @@ jobs:
             desktop/dist/latest-mac.yml
 
   build-linux:
-    needs: check-version
-    if: needs.check-version.outputs.build_artifacts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -133,6 +108,7 @@ jobs:
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist -- --linux
 
       - uses: actions/upload-artifact@v4
@@ -144,17 +120,68 @@ jobs:
             desktop/dist/latest-linux.yml
 
   # ─────────────────────────────────────────────
-  # Create GitHub Release and attach artifacts (if any)
+  # Android APK (unsigned, sideload)
+  # ─────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Stamp version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('mobile/package.json'));p.version='$VERSION';fs.writeFileSync('mobile/package.json',JSON.stringify(p,null,2)+'\n')"
+          echo "Stamped mobile/package.json → $VERSION"
+
+      - name: Generate native Android project
+        working-directory: mobile
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build unsigned APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK with version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          APK_SRC="mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          APK_DST="mobile/android/app/build/outputs/apk/release/Sloth-Voice-${VERSION}.apk"
+          mv "$APK_SRC" "$APK_DST"
+          echo "APK_PATH=$APK_DST" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-android
+          retention-days: 1
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+
+  # ─────────────────────────────────────────────
+  # Create GitHub Release and attach all artifacts
   # ─────────────────────────────────────────────
   github-release:
-    needs: [check-version, build-windows, build-macos, build-linux]
-    if: always() && !failure() && !cancelled()
+    needs: [build-windows, build-macos, build-linux, build-android]
+    if: always() && !cancelled() && !failure()
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download artifacts
-        if: needs.check-version.outputs.build_artifacts == 'true'
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -163,19 +190,11 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_ARTIFACTS: ${{ needs.check-version.outputs.build_artifacts }}
         run: |
           gh release delete "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --yes 2>/dev/null || true
-          if [ "$BUILD_ARTIFACTS" = "true" ]; then
-            gh release create "$GITHUB_REF_NAME" artifacts/** \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" \
-              --generate-notes
-          else
-            gh release create "$GITHUB_REF_NAME" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" \
-              --generate-notes
-          fi
+          gh release create "$GITHUB_REF_NAME" artifacts/** \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

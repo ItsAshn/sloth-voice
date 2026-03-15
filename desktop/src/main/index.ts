@@ -411,25 +411,42 @@ app.whenReady().then(() => {
 
   // Auto-updater (only runs in packaged builds)
   if (!is.dev) {
-    autoUpdater.checkForUpdates();
+    // Silent startup check
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error("Auto-updater startup check failed:", err);
+    });
 
-    autoUpdater.on("update-available", () => {
-      dialog.showMessageBox(mainWindow, {
+    autoUpdater.on("update-available", (info) => {
+      dialog.showMessageBox(mainWindow!, {
         type: "info",
         title: "Update available",
-        message:
-          "A new version of Sloth Voice is available. It will be downloaded in the background.",
+        message: `Sloth Voice ${info.version} is available.`,
+        detail: "It will be downloaded in the background. You will be notified when it is ready to install.",
         buttons: ["OK"],
       });
     });
 
-    autoUpdater.on("update-downloaded", () => {
+    autoUpdater.on("update-not-available", () => {
+      // Only show "up to date" message if this was triggered by a manual check.
+      // We detect manual checks via the flag below.
+      if ((autoUpdater as unknown as { _manualCheck?: boolean })._manualCheck) {
+        (autoUpdater as unknown as { _manualCheck?: boolean })._manualCheck = false;
+        dialog.showMessageBox(mainWindow!, {
+          type: "info",
+          title: "Up to date",
+          message: "Sloth Voice is up to date.",
+          buttons: ["OK"],
+        });
+      }
+    });
+
+    autoUpdater.on("update-downloaded", (info) => {
       dialog
-        .showMessageBox(mainWindow, {
+        .showMessageBox(mainWindow!, {
           type: "info",
           title: "Update ready",
-          message:
-            "Update downloaded. Restart Sloth Voice to apply the update.",
+          message: `Sloth Voice ${info.version} is ready to install.`,
+          detail: "Restart Sloth Voice now to apply the update, or install it the next time you launch.",
           buttons: ["Restart now", "Later"],
         })
         .then(({ response }) => {
@@ -441,6 +458,21 @@ app.whenReady().then(() => {
       console.error("Auto-updater error:", err);
     });
   }
+
+  // IPC: Manual update check — callable from renderer settings
+  ipcMain.handle("updater:check", async () => {
+    if (is.dev) {
+      return { status: "dev" };
+    }
+    try {
+      (autoUpdater as unknown as { _manualCheck?: boolean })._manualCheck = true;
+      const result = await autoUpdater.checkForUpdates();
+      return { status: "ok", version: result?.updateInfo?.version ?? null };
+    } catch (err) {
+      (autoUpdater as unknown as { _manualCheck?: boolean })._manualCheck = false;
+      return { status: "error", message: String(err) };
+    }
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

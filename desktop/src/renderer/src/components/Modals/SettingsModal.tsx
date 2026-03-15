@@ -5,6 +5,8 @@ interface Props {
   onClose: () => void;
 }
 
+type UpdateStatus = "idle" | "checking" | "up-to-date" | "error";
+
 export default function SettingsModal({ onClose }: Props) {
   const {
     audioInputDeviceId,
@@ -18,6 +20,8 @@ export default function SettingsModal({ onClose }: Props) {
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -42,6 +46,27 @@ export default function SettingsModal({ onClose }: Props) {
     }
     loadDevices();
   }, []);
+
+  async function handleCheckForUpdates() {
+    setUpdateStatus("checking");
+    setUpdateError(null);
+    try {
+      const result = await window.slothVoice.checkForUpdates();
+      if (result.status === "dev") {
+        setUpdateStatus("up-to-date");
+      } else if (result.status === "error") {
+        setUpdateStatus("error");
+        setUpdateError(result.message ?? "unknown error");
+      } else {
+        // "ok" — the main process will show its own dialog if an update is
+        // available or not available. We reset to idle after a short delay.
+        setUpdateStatus("idle");
+      }
+    } catch (err) {
+      setUpdateStatus("error");
+      setUpdateError(String(err));
+    }
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -128,6 +153,28 @@ export default function SettingsModal({ onClose }: Props) {
             <p className="text-text-muted text-[10px] font-mono">
               takes effect on next voice channel join
             </p>
+          </section>
+
+          {/* Updates */}
+          <section className="space-y-1.5">
+            <p className="label-xs">» updates</p>
+            <button
+              onClick={handleCheckForUpdates}
+              disabled={updateStatus === "checking"}
+              className="btn-primary text-xs py-1 px-4 disabled:opacity-50"
+            >
+              {updateStatus === "checking" ? "checking…" : "check for updates"}
+            </button>
+            {updateStatus === "up-to-date" && (
+              <p className="text-text-muted text-[10px] font-mono">
+                you are running in dev mode — no updates available
+              </p>
+            )}
+            {updateStatus === "error" && (
+              <p className="text-danger text-[10px] font-mono bg-danger/10 border border-danger/30 rounded px-2 py-1">
+                update check failed: {updateError}
+              </p>
+            )}
           </section>
         </div>
 

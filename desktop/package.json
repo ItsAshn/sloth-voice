@@ -50,8 +50,9 @@
       "out/**/*"
     ],
     "publish": {
-      "provider": "generic",
-      "url": "https://slothvoice.com/updates"
+      "provider": "github",
+      "owner": "itsashn",
+      "repo": "sloth-voice"
     },
     "win": {
       "target": "nsis",

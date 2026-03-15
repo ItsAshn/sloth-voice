@@ -7,3 +7,6 @@ dist/
 out/
 .DS_Store
 Thumbs.db
+
+# server/ lives in its own repo (itsashn/sloth-voice-server)
+server/
