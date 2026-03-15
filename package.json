@@ -1,14 +1,13 @@
 {
   "name": "sloth-voice",
-  "version": "0.2.0",
-  "description": "Sloth Voice — locally-hosted Discord alternative",
+  "version": "0.6.2",
+  "description": "Sloth Voice — self-hosted Discord alternative (desktop + mobile)",
   "private": true,
   "scripts": {
-    "server": "cd server && npm run dev",
     "desktop": "cd desktop && npm run dev",
     "mobile": "cd mobile && npx expo start",
-    "install:all": "npm i --prefix server && npm i --prefix desktop && npm i --prefix mobile",
-    "dev": "npx concurrently -n server,desktop -c blue,green \"npm run server\" \"npm run desktop\"",
+    "install:all": "npm i --prefix desktop && npm i --prefix mobile",
+    "dev": "cd desktop && npm run dev",
     "release": "node scripts/release.mjs"
   }
 }
