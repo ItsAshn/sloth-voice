@@ -30,7 +30,7 @@ services:
       # Persist the SQLite database across container restarts
       - server_data:/data
       # Persist uploaded files across container restarts
-      - server_uploads:/uploads
+      - server_uploads:/app/uploads
 
 volumes:
   server_data:
