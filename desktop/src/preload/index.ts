@@ -93,6 +93,43 @@ const slothVoiceAPI = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
 
+  // Auto-updater
+  checkForUpdates: (): Promise<{ checking: boolean; updateInfo?: unknown; error?: string }> =>
+    ipcRenderer.invoke("updater:check"),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke("updater:install"),
+  getUpdaterState: (): Promise<{ isDev: boolean; version: string }> =>
+    ipcRenderer.invoke("updater:getState"),
+  onUpdaterChecking: (cb: () => void) => {
+    ipcRenderer.on("updater:checking", () => cb());
+    return () => ipcRenderer.removeAllListeners("updater:checking");
+  },
+  onUpdaterAvailable: (
+    cb: (info: { version: string }) => void,
+  ) => {
+    ipcRenderer.on("updater:available", (_e, info) => cb(info));
+    return () => ipcRenderer.removeAllListeners("updater:available");
+  },
+  onUpdaterNotAvailable: (cb: () => void) => {
+    ipcRenderer.on("updater:not-available", () => cb());
+    return () => ipcRenderer.removeAllListeners("updater:not-available");
+  },
+  onUpdaterProgress: (
+    cb: (progress: { percent: number; transferred: number; total: number }) => void,
+  ) => {
+    ipcRenderer.on("updater:progress", (_e, progress) => cb(progress));
+    return () => ipcRenderer.removeAllListeners("updater:progress");
+  },
+  onUpdaterDownloaded: (
+    cb: (info: { version: string }) => void,
+  ) => {
+    ipcRenderer.on("updater:downloaded", (_e, info) => cb(info));
+    return () => ipcRenderer.removeAllListeners("updater:downloaded");
+  },
+  onUpdaterError: (cb: (err: { message: string }) => void) => {
+    ipcRenderer.on("updater:error", (_e, err) => cb(err));
+    return () => ipcRenderer.removeAllListeners("updater:error");
+  },
+
   // Deep links (invite links)
   getPendingDeepLink: (): Promise<{
     serverUrl: string;

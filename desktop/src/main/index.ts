@@ -7,7 +7,6 @@ import {
   Tray,
   Menu,
   nativeImage,
-  dialog,
 } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -476,36 +475,70 @@ app.whenReady().then(() => {
 
   // Auto-updater (only runs in packaged builds)
   if (!is.dev) {
-    autoUpdater.checkForUpdates();
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
 
-    autoUpdater.on("update-available", () => {
-      dialog.showMessageBox(mainWindow, {
-        type: "info",
-        title: "Update available",
-        message:
-          "A new version of Sloth Voice is available. It will be downloaded in the background.",
-        buttons: ["OK"],
+    const sendUpdaterEvent = (event: string, data?: unknown) => {
+      BrowserWindow.getAllWindows().forEach((w) =>
+        w.webContents.send(`updater:${event}`, data),
+      );
+    };
+
+    autoUpdater.on("checking-for-update", () => {
+      sendUpdaterEvent("checking");
+    });
+
+    autoUpdater.on("update-available", (info) => {
+      sendUpdaterEvent("available", { version: info.version });
+    });
+
+    autoUpdater.on("update-not-available", () => {
+      sendUpdaterEvent("not-available");
+    });
+
+    autoUpdater.on("download-progress", (progress) => {
+      sendUpdaterEvent("progress", {
+        percent: Math.round(progress.percent),
+        transferred: progress.transferred,
+        total: progress.total,
       });
     });
 
-    autoUpdater.on("update-downloaded", () => {
-      dialog
-        .showMessageBox(mainWindow, {
-          type: "info",
-          title: "Update ready",
-          message:
-            "Update downloaded. Restart Sloth Voice to apply the update.",
-          buttons: ["Restart now", "Later"],
-        })
-        .then(({ response }) => {
-          if (response === 0) autoUpdater.quitAndInstall();
-        });
+    autoUpdater.on("update-downloaded", (info) => {
+      sendUpdaterEvent("downloaded", { version: info.version });
     });
 
     autoUpdater.on("error", (err) => {
       console.error("Auto-updater error:", err);
+      sendUpdaterEvent("error", { message: err?.message ?? "Unknown error" });
     });
+
+    autoUpdater.checkForUpdates();
   }
+
+  // IPC: Updater controls
+  ipcMain.handle("updater:check", async () => {
+    if (is.dev) return { checking: true };
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { checking: false, updateInfo: result?.updateInfo };
+    } catch (err) {
+      return { checking: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle("updater:install", () => {
+    if (is.dev) return;
+    app.isQuiting = true;
+    autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.handle("updater:getState", () => {
+    return {
+      isDev: is.dev,
+      version: app.getVersion(),
+    };
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

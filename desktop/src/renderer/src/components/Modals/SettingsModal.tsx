@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../store/useStore";
+import { useUpdaterActions } from "../../hooks/useUpdater";
 
 interface Props {
   onClose: () => void;
@@ -13,7 +14,16 @@ export default function SettingsModal({ onClose }: Props) {
     setAudioOutputDeviceId,
     audioBitrateKbps,
     setAudioBitrateKbps,
+    updateState,
+    updateVersion,
+    updateProgress,
+    updateError,
   } = useStore();
+
+  const { checkForUpdates, installUpdate, getVersion, isDev } = useUpdaterActions();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(true);
 
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -24,6 +34,11 @@ export default function SettingsModal({ onClose }: Props) {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion);
+    isDev().then(setIsDevMode);
+  }, [getVersion, isDev]);
 
   useEffect(() => {
     async function loadDevices() {
@@ -42,6 +57,15 @@ export default function SettingsModal({ onClose }: Props) {
     }
     loadDevices();
   }, []);
+
+  const handleCheckUpdates = async () => {
+    setIsChecking(true);
+    try {
+      await checkForUpdates();
+    } finally {
+      setTimeout(() => setIsChecking(false), 1000);
+    }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -128,6 +152,78 @@ export default function SettingsModal({ onClose }: Props) {
             <p className="text-text-muted text-[10px] font-mono">
               takes effect on next voice channel join
             </p>
+          </section>
+
+          {/* Updates */}
+          <section className="space-y-1.5">
+            <p className="label-xs">» app version</p>
+            <div className="flex items-center justify-between">
+              <span className="text-text-normal text-[11px] font-mono">
+                v{appVersion ?? "—"}
+              </span>
+              {isDevMode && (
+                <span className="text-warning text-[10px] font-mono">(dev build)</span>
+              )}
+            </div>
+            {!isDevMode && (
+              <>
+                {updateState === "idle" && (
+                  <button
+                    onClick={handleCheckUpdates}
+                    disabled={isChecking}
+                    className="mt-2 bg-surface-high hover:bg-surface-highest border border-surface-highest text-text-normal text-[11px] font-mono px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                  >
+                    {isChecking ? "checking…" : "check for updates"}
+                  </button>
+                )}
+                {updateState === "checking" && (
+                  <p className="text-text-muted text-[11px] font-mono mt-1">
+                    checking for updates…
+                  </p>
+                )}
+                {updateState === "downloading" && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+                      <span className="text-text-muted">downloading {updateVersion}</span>
+                      <span className="text-text-normal">{updateProgress}%</span>
+                    </div>
+                    <div className="h-1 bg-surface-highest rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-brand-primary transition-all duration-300"
+                        style={{ width: `${updateProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {updateState === "ready" && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-success text-[11px] font-mono">
+                      update ready ({updateVersion})
+                    </span>
+                    <button
+                      onClick={installUpdate}
+                      className="bg-success hover:bg-success/80 text-surface-lowest text-[11px] font-mono px-3 py-1 rounded transition-colors"
+                    >
+                      restart now
+                    </button>
+                  </div>
+                )}
+                {updateState === "error" && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-danger text-[11px] font-mono">
+                      update failed: {updateError}
+                    </p>
+                    <button
+                      onClick={handleCheckUpdates}
+                      disabled={isChecking}
+                      className="bg-surface-high hover:bg-surface-highest border border-surface-highest text-text-normal text-[11px] font-mono px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                    >
+                      try again
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </section>
         </div>
 

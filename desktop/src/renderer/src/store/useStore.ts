@@ -85,6 +85,16 @@ interface StoreState {
   voiceError: string | null;
   setVoiceError: (error: string | null) => void;
 
+  // auto-updater state
+  updateState: "idle" | "checking" | "downloading" | "ready" | "error";
+  setUpdateState: (state: "idle" | "checking" | "downloading" | "ready" | "error") => void;
+  updateProgress: number;
+  setUpdateProgress: (progress: number) => void;
+  updateVersion: string | null;
+  setUpdateVersion: (version: string | null) => void;
+  updateError: string | null;
+  setUpdateError: (error: string | null) => void;
+
   // direct messages
   dmChannels: DMChannel[];
   setDMChannels: (channels: DMChannel[]) => void;
@@ -207,6 +217,15 @@ export const useStore = create<StoreState>()(
       setAudioOutputDeviceId: (id) => set({ audioOutputDeviceId: id }),
       voiceError: null,
       setVoiceError: (error) => set({ voiceError: error }),
+
+      updateState: "idle",
+      setUpdateState: (state) => set({ updateState: state }),
+      updateProgress: 0,
+      setUpdateProgress: (progress) => set({ updateProgress: progress }),
+      updateVersion: null,
+      setUpdateVersion: (version) => set({ updateVersion: version }),
+      updateError: null,
+      setUpdateError: (error) => set({ updateError: error }),
 
       dmChannels: [],
       setDMChannels: (channels) => set({ dmChannels: channels }),

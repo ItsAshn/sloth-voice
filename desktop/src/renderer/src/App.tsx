@@ -4,6 +4,7 @@ import { useStore } from "./store/useStore";
 import AppLayout from "./components/Layout/AppLayout";
 import HomePage from "./components/Home/HomePage";
 import { useBackgroundNotifications } from "./hooks/useBackgroundNotifications";
+import { useUpdater } from "./hooks/useUpdater";
 
 export default function App() {
   const setSavedServers = useStore((s) => s.setSavedServers);
@@ -14,6 +15,9 @@ export default function App() {
 
   // Keep background notification sockets alive in the main process
   useBackgroundNotifications();
+
+  // Auto-updater event listener
+  useUpdater();
 
   return (
     <Routes>
