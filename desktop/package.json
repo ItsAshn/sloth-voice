@@ -1,6 +1,6 @@
 {
   "name": "sloth-voice-desktop",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "Sloth Voice desktop client",
   "type": "module",
   "main": "out/main/index.js",
