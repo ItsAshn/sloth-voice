@@ -38,6 +38,9 @@ RUN groupadd --system sloth && useradd --system --gid sloth sloth
 RUN mkdir -p /data && chown sloth:sloth /data
 ENV SERVER_DB_PATH=/data/server.db
 
+# Directory for uploaded files (mount a volume here in production)
+RUN mkdir -p /uploads && chown sloth:sloth /uploads
+
 EXPOSE 5000
 
 USER sloth

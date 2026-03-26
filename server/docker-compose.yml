@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/${IMAGE_OWNER:-itsashn}/sloth-voice-server:${SERVER_VERSION:-v0.7.1}
+    image: ghcr.io/${IMAGE_OWNER:-itsashn}/sloth-voice-server:v0.8.2
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +29,9 @@ services:
     volumes:
       # Persist the SQLite database across container restarts
       - server_data:/data
+      # Persist uploaded files across container restarts
+      - server_uploads:/uploads
 
 volumes:
   server_data:
+  server_uploads:
