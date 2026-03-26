@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/${IMAGE_OWNER:-itsashn}/sloth-voice-server:v0.8.3
+    image: ghcr.io/${IMAGE_OWNER:-itsashn}/sloth-voice-server:v0.8.4
     build:
       context: .
       dockerfile: Dockerfile
