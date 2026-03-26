@@ -64,14 +64,25 @@ bumpPackage("package.json", version);
 bumpPackage("desktop/package.json", version);
 bumpPackage("mobile/package.json", version);
 bumpPackage("packages/shared/package.json", version);
+bumpPackage("server/package.json", version);
 
-// 2. Commit
+// 2. Update docker-compose.yml image tag
+const composePath = resolve(root, "server/docker-compose.yml");
+let compose = readFileSync(composePath, "utf8");
+compose = compose.replace(
+  /image: ghcr\.io\/\$\{IMAGE_OWNER:-[^}]+\}\/sloth-voice-server:v[\d.]+/g,
+  `image: ghcr.io/\${IMAGE_OWNER:-itsashn}/sloth-voice-server:v${version}`
+);
+writeFileSync(composePath, compose);
+console.log(`  updated server/docker-compose.yml → v${version}`);
+
+// 3. Commit
 run(
-  `git add package.json desktop/package.json mobile/package.json packages/shared/package.json`,
+  `git add package.json desktop/package.json mobile/package.json packages/shared/package.json server/package.json server/docker-compose.yml`,
 );
 run(`git commit -m "chore: release ${tag}"`);
 
-// 3. Annotated tag
+// 4. Annotated tag
 run(`git tag -a ${tag} -m "Release ${tag}"`);
 
 // 4. Push commit + tag
@@ -80,5 +91,5 @@ run(`git push origin ${tag}`);
 
 console.log(`\nDone! CI will now:`);
 console.log(`  • build the desktop app (Win / macOS / Linux)`);
-console.log(`  • build the Android APK`);
+console.log(`  • build and push Docker image to ghcr.io`);
 console.log(`  • create a GitHub Release with all installers + update manifests`);

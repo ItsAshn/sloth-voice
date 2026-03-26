@@ -92,6 +92,20 @@ const slothVoiceAPI = {
   getVersion: (): Promise<string> => ipcRenderer.invoke("app:version"),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
+
+  // Deep links (invite links)
+  getPendingDeepLink: (): Promise<{
+    serverUrl: string;
+    inviteCode: string;
+  } | null> => ipcRenderer.invoke("deep-link:getPending"),
+  clearPendingDeepLink: (): Promise<void> =>
+    ipcRenderer.invoke("deep-link:clear"),
+  onDeepLinkInvite: (
+    cb: (payload: { serverUrl: string; inviteCode: string }) => void,
+  ) => {
+    ipcRenderer.on("deep-link:invite", (_e, payload) => cb(payload));
+    return () => ipcRenderer.removeAllListeners("deep-link:invite");
+  },
 };
 
 if (process.contextIsolated) {

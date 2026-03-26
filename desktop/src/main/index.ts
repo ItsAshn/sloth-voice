@@ -24,6 +24,21 @@ app.commandLine.appendSwitch("disable-gpu-disk-cache");
 // incoming WebRTC audio streams delivered via mediasoup consumers).
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
+// Register deep link protocol
+const PROTOCOL = "sloth-voice";
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
+      join(__dirname, "..", ".."),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+// Deep link handling state
+let pendingDeepLink: { serverUrl: string; inviteCode: string } | null = null;
+
 // Persistent server list store
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const store = new Store<{ servers: SavedServer[] }>({
@@ -294,13 +309,52 @@ if (!gotTheLock) {
   // When a second launch is attempted, focus the existing window.
   // (Only registered in production since dev skips the lock entirely.)
   if (!is.dev) {
-    app.on("second-instance", () => {
+    app.on("second-instance", (_e, argv) => {
       if (!mainWindow) return;
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
+      // Handle deep link from second instance
+      const deepLink = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+      if (deepLink) {
+        handleDeepLink(deepLink);
+      }
     });
   }
+}
+
+function handleDeepLink(url: string): void {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== `${PROTOCOL}:`) return;
+    if (parsed.pathname === "/join" || parsed.pathname === "join") {
+      const serverUrl = parsed.searchParams.get("server");
+      const inviteCode = parsed.searchParams.get("code");
+      if (serverUrl && inviteCode) {
+        pendingDeepLink = { serverUrl, inviteCode };
+        // Notify renderer of pending deep link
+        BrowserWindow.getAllWindows().forEach((w) =>
+          w.webContents.send("deep-link:invite", { serverUrl, inviteCode }),
+        );
+      }
+    }
+  } catch {
+    console.error("Failed to parse deep link:", url);
+  }
+}
+
+// Handle deep link when app is launched via protocol
+if (process.platform === "darwin") {
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    handleDeepLink(url);
+  });
+}
+
+// Also check for deep link in argv (Windows/Linux)
+const deepLinkArg = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+if (deepLinkArg) {
+  handleDeepLink(deepLinkArg);
 }
 
 app.whenReady().then(() => {
@@ -405,6 +459,17 @@ app.whenReady().then(() => {
 
   ipcMain.handle("app:version", () => app.getVersion());
   ipcMain.handle("open-external", (_e, url: string) => shell.openExternal(url));
+
+  // Deep link handling
+  ipcMain.handle("deep-link:getPending", () => {
+    const link = pendingDeepLink;
+    pendingDeepLink = null;
+    return link;
+  });
+
+  ipcMain.handle("deep-link:clear", () => {
+    pendingDeepLink = null;
+  });
 
   mainWindow = createWindow();
   createTray(mainWindow);

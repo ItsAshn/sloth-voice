@@ -9,6 +9,16 @@ import type {
   ServerSession,
 } from "../types";
 
+interface DMChannel {
+  id: string;
+  other_user_id: string;
+  other_username: string;
+  other_display_name: string;
+  other_avatar: string | null;
+  created_at: number;
+  last_message_at: number | null;
+}
+
 interface StoreState {
   // server list (source of truth: electron-store via IPC)
   savedServers: SavedServer[];
@@ -71,6 +81,18 @@ interface StoreState {
   setAudioInputDeviceId: (id: string | null) => void;
   audioOutputDeviceId: string | null;
   setAudioOutputDeviceId: (id: string | null) => void;
+  /** Voice connection error message, if any */
+  voiceError: string | null;
+  setVoiceError: (error: string | null) => void;
+
+  // direct messages
+  dmChannels: DMChannel[];
+  setDMChannels: (channels: DMChannel[]) => void;
+  activeDMChannel: DMChannel | null;
+  setActiveDMChannel: (channel: DMChannel | null) => void;
+  dmMessages: Message[];
+  setDMMessages: (messages: Message[]) => void;
+  addDMMessage: (message: Message) => void;
 }
 
 export const useStore = create<StoreState>()(
@@ -183,6 +205,22 @@ export const useStore = create<StoreState>()(
       setAudioInputDeviceId: (id) => set({ audioInputDeviceId: id }),
       audioOutputDeviceId: null,
       setAudioOutputDeviceId: (id) => set({ audioOutputDeviceId: id }),
+      voiceError: null,
+      setVoiceError: (error) => set({ voiceError: error }),
+
+      dmChannels: [],
+      setDMChannels: (channels) => set({ dmChannels: channels }),
+      activeDMChannel: null,
+      setActiveDMChannel: (channel) =>
+        set({ activeDMChannel: channel, dmMessages: [] }),
+      dmMessages: [],
+      setDMMessages: (messages) => set({ dmMessages: messages }),
+      addDMMessage: (message) =>
+        set((s) => ({
+          dmMessages: s.dmMessages.some((m) => m.id === message.id)
+            ? s.dmMessages
+            : [...s.dmMessages, message],
+        })),
     }),
     {
       name: "sloth-voice-saved-servers",

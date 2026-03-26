@@ -18,7 +18,7 @@ Analyze all staged and unstaged changes, commit directly to master, push, and cr
 6. If not already on `master`, switch to master and merge: `git checkout master && git merge --ff-only -`.
 7. Push directly to master: `git push origin master`.
 8. Determine the next version by reading the current version from `package.json` and incrementing the patch number (e.g. `0.1.0` → `0.1.1`). If the changes include new features, increment the minor number instead (e.g. `0.1.0` → `0.2.0`).
-9. Run the release script: `node scripts/release.mjs v<new-version>`. This bumps all package.json files, commits, tags, and pushes — which triggers the CI release workflow to build installers and create the GitHub Release.
+9. Run the release script: `node scripts/release.mjs v<new-version>`. This bumps all package.json files and docker-compose.yml, commits, tags, and pushes — which triggers the CI release workflow to build desktop apps, push the Docker image to ghcr.io, and create the GitHub Release.
 10. Report the new version and confirm the release tag was pushed.
 
 ## Important rules

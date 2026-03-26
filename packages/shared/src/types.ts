@@ -82,3 +82,23 @@ export interface ServerSession {
   token: string;
   user: User;
 }
+
+export interface DMChannel {
+  id: string;
+  other_user_id: string;
+  other_username: string;
+  other_display_name: string;
+  other_avatar: string | null;
+  created_at: number;
+  last_message_at: number | null;
+}
+
+export interface FileAttachment {
+  id: string;
+  message_id: string | null;
+  filename: string;
+  url: string;
+  size: number;
+  content_type?: string;
+  created_at: number;
+}

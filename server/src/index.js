@@ -1,4 +1,6 @@
 require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -11,10 +13,46 @@ const channelRoutes = require("./routes/channels");
 const messageRoutes = require("./routes/messages");
 const serverInfoRoutes = require("./routes/serverInfo");
 const roleRoutes = require("./routes/roles");
+const dmRoutes = require("./routes/dms");
+const attachmentRoutes = require("./routes/attachments");
 const { registerChatHandlers } = require("./socket/chatHandler");
 const { registerVoiceHandlers } = require("./socket/voiceHandler");
 const { openPorts, registerShutdownHook } = require("./upnp");
 const { resolvePublicAddress, startIpWatcher } = require("./publicAddress");
+
+// Uploads directory for file attachments
+const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, "../uploads");
+
+function printBanner() {
+  console.log(`
+ ╭───────────────────────────────────────────────────────────╮
+ │                                                           │
+ │   🦥 Sloth Voice Server                                   │
+ │                                                           │
+ ╰───────────────────────────────────────────────────────────╯
+`);
+}
+
+function checkEnvFile() {
+  const envPath = path.join(__dirname, "..", ".env");
+  const envExamplePath = path.join(__dirname, "..", ".env.example");
+
+  if (!fs.existsSync(envPath)) {
+    if (fs.existsSync(envExamplePath)) {
+      console.error(
+        "\n[!] No .env file found.\n" +
+        "    Run 'npm run setup' to create configuration interactively,\n" +
+        "    or copy .env.example to .env and edit it manually.\n"
+      );
+    } else {
+      console.error(
+        "\n[!] No .env file found.\n" +
+        "    Run 'npm run setup' to create configuration.\n"
+      );
+    }
+    process.exit(1);
+  }
+}
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -35,6 +73,11 @@ app.use("/api/channels", channelRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/server", serverInfoRoutes);
 app.use("/api/roles", roleRoutes);
+app.use("/api/dms", dmRoutes);
+app.use("/api/attachments", attachmentRoutes);
+
+// Static file serving for uploads
+app.use("/uploads", express.static(uploadsDir));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -62,27 +105,48 @@ const RTC_MAX = parseInt(process.env.RTC_MAX_PORT || "49999", 10);
 const SERVER_NAME = process.env.SERVER_NAME || "My Sloth Voice Server";
 
 async function start() {
-  // Fail fast if JWT_SECRET is not configured — the default is insecure.
+  printBanner();
+
+  // Check for .env file
+  checkEnvFile();
+
+  // Fail fast if JWT_SECRET is not configured
   if (
     !process.env.JWT_SECRET ||
     process.env.JWT_SECRET === "change_this_to_a_long_random_secret"
   ) {
     console.error(
-      "\n[!] JWT_SECRET is not set (or still the placeholder value).\n" +
-        "    Set a strong random secret in your .env file or environment.\n" +
-        "    Example:  JWT_SECRET=$(openssl rand -base64 48)\n",
+      "\n[!] JWT_SECRET is not set or using default placeholder.\n" +
+        "    This value must be a strong random string.\n" +
+        "    \n" +
+        "    Generate one with:\n" +
+        "      openssl rand -hex 64\n" +
+        "    \n" +
+        "    Then set it in your .env file:\n" +
+        "      JWT_SECRET=<your-generated-secret>\n" +
+        "    \n" +
+        "    Or run 'npm run setup' for interactive configuration.\n"
     );
     process.exit(1);
   }
 
-  initDb();
+  console.log("[✓] Configuration validated");
+
+  // Initialize database
+  try {
+    initDb();
+    console.log("[✓] Database initialized");
+  } catch (err) {
+    console.error("[!] Failed to initialize database:", err.message);
+    console.error("    Check SERVER_DB_PATH in your .env file");
+    process.exit(1);
+  }
 
   // Register clean-up hooks before opening ports so Ctrl-C removes them.
   registerShutdownHook();
 
   // Attempt UPnP port mapping (non-fatal if unavailable).
-  // openPorts clamps the RTC range to UPNP_RTC_MAX_PORTS and returns the
-  // effective range so mediasoup uses the exact ports that were forwarded.
+  console.log(`[i] Configuring network (UPnP: ${process.env.UPNP_ENABLED !== 'false' ? 'enabled' : 'disabled'})...`);
   const { effectiveRtcMin, effectiveRtcMax } = await openPorts({
     httpPort: PORT,
     rtcMinPort: RTC_MIN,
@@ -93,28 +157,57 @@ async function start() {
   process.env.RTC_MIN_PORT = String(effectiveRtcMin);
   process.env.RTC_MAX_PORT = String(effectiveRtcMax);
 
-  // Resolve PUBLIC_ADDRESS to a bare IPv4 — supports static IPs, DDNS
-  // hostnames, and fully automatic detection via public IP-echo services.
-  // The watcher keeps it current if the IP changes (ISP reassignment, DDNS
-  // propagation, etc.) so voice stays working without a server restart.
-  await resolvePublicAddress();
+  if (effectiveRtcMax - effectiveRtcMin + 1 < RTC_MAX - RTC_MIN + 1) {
+    console.log(
+      `[i] RTC port range clamped: ${effectiveRtcMin}-${effectiveRtcMax} ` +
+        `(UPnP limit, ${effectiveRtcMax - effectiveRtcMin + 1} ports)`
+    );
+  }
+
+  // Resolve PUBLIC_ADDRESS to a bare IPv4
+  console.log("[i] Resolving public address...");
+  try {
+    await resolvePublicAddress();
+    const addr = process.env.PUBLIC_ADDRESS || "auto-detected";
+    console.log(`[✓] Public address: ${addr}`);
+  } catch (err) {
+    console.warn(
+      `[!] Could not resolve public address: ${err.message}\n` +
+      "    Voice may not work for external clients.\n" +
+      "    Set PUBLIC_ADDRESS in .env if you know your IP."
+    );
+  }
   startIpWatcher();
 
-  await createWorker();
+  // Start mediasoup worker
+  console.log("[i] Starting voice server...");
+  try {
+    await createWorker();
+    console.log("[✓] Media worker started");
+  } catch (err) {
+    console.error("[!] Failed to start mediasoup worker:", err.message);
+    console.error("    Voice will not be available.");
+    console.error("    On Linux, ensure build tools are installed:");
+    console.error("      apt-get install build-essential python3");
+  }
 
+  // Start HTTP server
   httpServer.listen(PORT, () => {
-    console.log(
-      `\n Sloth Voice Server "${SERVER_NAME}" running on port ${PORT}`,
-    );
-    console.log(`   Health: http://localhost:${PORT}/health\n`);
+    console.log(`\n[✓] Server "${SERVER_NAME}" running`);
+    console.log(`[i] HTTP:       http://localhost:${PORT}`);
+    console.log(`[i] Health:     http://localhost:${PORT}/health`);
+    console.log(`[i] Voice:      UDP ${process.env.RTC_MIN_PORT}-${process.env.RTC_MAX_PORT}`);
+    console.log("");
+    console.log("Connect with the Sloth Voice desktop client.");
+    console.log("Press Ctrl+C to stop.\n");
   });
 
-  // Graceful shutdown — close HTTP + Socket.IO so in-flight requests finish
+  // Graceful shutdown
   const shutdown = (signal) => {
     console.log(`\n[${signal}] Shutting down gracefully…`);
     io.close();
     httpServer.close(() => {
-      console.log("[+] HTTP server closed.");
+      console.log("[✓] HTTP server closed.");
       process.exit(0);
     });
     // Force exit after 5 s if connections hang
@@ -124,4 +217,8 @@ async function start() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
-start().catch(console.error);
+start().catch((err) => {
+  console.error("\n[!] Server failed to start:", err.message);
+  console.error("    Run 'npm run doctor' to check your configuration.");
+  process.exit(1);
+});

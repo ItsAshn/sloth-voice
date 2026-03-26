@@ -1,13 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useStore } from "../../store/useStore";
-import { sendMessage, configureApi } from "../../api/server";
+import { sendMessage, uploadAttachment, configureApi } from "../../api/server";
 
 interface Props {
   channelId: string;
   channelName: string;
 }
 
-/** Extract the @-query currently being typed, e.g. "@foo" → "foo". Returns null if not in an @mention. */
 function getAtQuery(text: string, cursor: number): string | null {
   const before = text.slice(0, cursor);
   const match = /(?:^|[\s])@([\w.\-]*)$/.exec(before);
@@ -22,12 +21,15 @@ export default function MessageInput({ channelId, channelName }: Props) {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [atQuery, setAtQuery] = useState<string | null>(null);
-  const [atIndex, setAtIndex] = useState(0); // cursor index of the "@" token
+  const [atIndex, setAtIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const suggestionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // Always include @everyone / @here in the suggestions
   const specialTargets = ["everyone", "here"];
   const allSuggestions: string[] = [
     ...specialTargets,
@@ -40,15 +42,51 @@ export default function MessageInput({ channelId, channelName }: Props) {
         )
       : [];
 
-  // Reset selected index when suggestions list changes
   useEffect(() => {
     setSelectedIndex(0);
   }, [suggestions.length, atQuery]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     suggestionRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleUpload = async () => {
+    if (!pendingFile || !activeServer || !session) return;
+    setUploading(true);
+    setUploadProgress(0);
+    configureApi(activeServer.url, session.token);
+    try {
+      const result = await uploadAttachment(channelId, pendingFile);
+      setSendError(null);
+      const attachmentText = `![${result.filename}](${result.url})`;
+      if (content.trim()) {
+        await sendMessage(channelId, content + "\n" + attachmentText);
+      } else {
+        await sendMessage(channelId, attachmentText);
+      }
+      setContent("");
+      setPendingFile(null);
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
+        inputRef.current.focus();
+      }
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || "Failed to upload file";
+      setSendError(message);
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
 
   const handleSend = async () => {
     const text = content.trim();
@@ -75,7 +113,6 @@ export default function MessageInput({ channelId, channelName }: Props) {
       const message = (err as { response?: { data?: { error?: string } } })
         ?.response?.data?.error;
       if (status === 401) {
-        // Token expired or invalid — clear the session so AuthModal is shown
         if (activeServer) clearSession(activeServer.id);
       } else if (status === 403) {
         setSendError(message ?? "you do not have permission to send messages");
@@ -142,7 +179,6 @@ export default function MessageInput({ channelId, channelName }: Props) {
       const query = getAtQuery(val, cursor);
       setAtQuery(query);
       if (query !== null) {
-        // Record the position of the @ sign so we can replace the right token
         const before = val.slice(0, cursor);
         setAtIndex(before.lastIndexOf("@"));
       }
@@ -157,19 +193,23 @@ export default function MessageInput({ channelId, channelName }: Props) {
     const newVal = `${before}@${username} ${after}`;
     setContent(newVal);
     setAtQuery(null);
-    // Restore focus
     requestAnimationFrame(() => {
       if (inputRef.current) {
-        const pos = before.length + username.length + 2; // @username + space
+        const pos = before.length + username.length + 2;
         inputRef.current.setSelectionRange(pos, pos);
         inputRef.current.focus();
       }
     });
   };
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="px-4 pb-4 pt-2 shrink-0">
-      {/* @-mention autocomplete popover */}
       {suggestions.length > 0 && (
         <div className="mb-1 bg-surface-low border border-surface-highest rounded overflow-hidden shadow-lg max-h-40 overflow-y-auto">
           {suggestions.slice(0, 8).map((u, i) => (
@@ -179,7 +219,7 @@ export default function MessageInput({ channelId, channelName }: Props) {
                 suggestionRefs.current[i] = el;
               }}
               onMouseDown={(e) => {
-                e.preventDefault(); // don't blur textarea
+                e.preventDefault();
                 insertMention(u);
               }}
               onMouseEnter={() => setSelectedIndex(i)}
@@ -192,12 +232,38 @@ export default function MessageInput({ channelId, channelName }: Props) {
               <span className="text-brand-primary text-[10px]">@</span>
               {u}
               {(u === "everyone" || u === "here") && (
-                <span className="ml-auto text-text-muted text-[9px]">
-                  group
-                </span>
+                <span className="ml-auto text-text-muted text-[9px]">group</span>
               )}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Pending file preview */}
+      {pendingFile && (
+        <div className="mb-2 bg-surface-lowest border border-surface-highest rounded p-2 flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-text-normal text-xs font-mono truncate">
+              {pendingFile.name}
+            </p>
+            <p className="text-text-muted text-[10px]">
+              {formatFileSize(pendingFile.size)}
+            </p>
+          </div>
+          <button
+            onClick={() => setPendingFile(null)}
+            className="text-text-muted hover:text-danger text-xs px-2"
+            disabled={uploading}
+          >
+            cancel
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={uploading}
+            className="btn-primary text-xs py-1 px-3 disabled:opacity-40"
+          >
+            {uploading ? `${uploadProgress}%` : "upload"}
+          </button>
         </div>
       )}
 
@@ -212,6 +278,21 @@ export default function MessageInput({ channelId, channelName }: Props) {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileSelect}
+          accept="image/*,video/*,audio/*,.pdf,.txt,.json"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="text-text-muted hover:text-text-normal text-xs px-2 py-1 rounded hover:bg-surface-highest disabled:opacity-40"
+          title="attach file"
+        >
+          📎
+        </button>
         <button
           onClick={handleSend}
           disabled={sending || !content.trim()}
@@ -226,7 +307,8 @@ export default function MessageInput({ channelId, channelName }: Props) {
         </p>
       ) : (
         <p className="text-text-muted text-[10px] mt-1 px-1 font-mono">
-          enter to send · shift+enter for new line · @ to mention
+          enter to send · shift+enter for new line · @ to mention · 📎 for
+          files
         </p>
       )}
     </div>

@@ -122,7 +122,15 @@ function registerChatHandlers(io, socket) {
   socket.on("user:subscribe", ({ userId }) => {
     if (userId) {
       socket.join(`user:${userId}`);
+      socket.join(`dm:${userId}`);
       socket.userId = userId;
+    }
+  });
+
+  // DM subscription — for receiving direct messages
+  socket.on("dm:subscribe", ({ userId }) => {
+    if (userId) {
+      socket.join(`dm:${userId}`);
     }
   });
   socket.on("channel:join", (channelId) => {

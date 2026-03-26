@@ -4,25 +4,14 @@ import { types as MsTypes } from "mediasoup-client";
 import { Socket } from "socket.io-client";
 import { useStore } from "../store/useStore";
 
-/**
- * Threshold for local speaking detection using time-domain RMS.
- * Time-domain values for silence are ~128; any speech deviates from that.
- * A value of 8 corresponds to roughly 6% of full-scale amplitude — sensitive
- * enough to catch whispers but above mic self-noise on most hardware.
- */
 const LOCAL_SPEAKING_THRESHOLD = 8;
-/**
- * Threshold for remote speaking detection using frequency-domain average.
- * Remote WebRTC audio has consistent magnitude levels so frequency-domain
- * works well here.
- */
 const REMOTE_SPEAKING_THRESHOLD = 15;
 const SPEAKING_POLL_MS = 80;
-/** How long to hold the "speaking" state after silence before turning it off. */
 const SPEAKING_HOLD_MS = 600;
 const QUALITY_POLL_MS = 3000;
+const RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-/** Derive a quality rating from an RTCStatsReport. */
 function computeQualityFromStats(
   report: RTCStatsReport,
 ): "good" | "fair" | "poor" {
@@ -30,11 +19,7 @@ function computeQualityFromStats(
   let jitterMs = 0;
   let lossRate = 0;
   report.forEach((stat: RTCStats & Record<string, unknown>) => {
-    if (
-      stat.type === "candidate-pair" &&
-      (stat as any).state === "succeeded" &&
-      (stat as any).currentRoundTripTime != null
-    ) {
+    if (stat.type === "candidate-pair" &&(stat as any).state === "succeeded" &&(stat as any).currentRoundTripTime != null) {
       rttMs = ((stat as any).currentRoundTripTime as number) * 1000;
     }
     if (stat.type === "inbound-rtp" && (stat as any).kind === "audio") {
@@ -60,8 +45,6 @@ function startSpeakingDetection(
   stream: MediaStream,
   onSpeaking: (speaking: boolean) => void,
 ): () => void {
-  // Clone the stream so mediasoup's use of the original track cannot affect
-  // our analyser node.
   const analyserStream = stream.clone();
   const ctx = new AudioContext();
   const source = ctx.createMediaStreamSource(analyserStream);
@@ -69,7 +52,6 @@ function startSpeakingDetection(
   analyser.fftSize = 512;
   analyser.smoothingTimeConstant = 0.1;
   source.connect(analyser);
-  // Time-domain buffer is fftSize (not frequencyBinCount)
   const buf = new Uint8Array(analyser.fftSize);
   let speaking = false;
   let stopped = false;
@@ -79,7 +61,6 @@ function startSpeakingDetection(
   const poll = () => {
     if (stopped) return;
     if (ctx.state === "suspended") {
-      // Context got suspended — resume then retry
       ctx
         .resume()
         .then(() => {
@@ -90,7 +71,6 @@ function startSpeakingDetection(
         });
       return;
     }
-    // Use time-domain data for local mic: silence = all 128, speech deviates
     analyser.getByteTimeDomainData(buf);
     let squareSum = 0;
     for (let i = 0; i < buf.length; i++) {
@@ -100,7 +80,6 @@ function startSpeakingDetection(
     const rms = Math.sqrt(squareSum / buf.length);
     const nowSpeaking = rms > LOCAL_SPEAKING_THRESHOLD;
     if (nowSpeaking) {
-      // Cancel any pending hold-off — we're still speaking
       if (holdTimer !== null) {
         clearTimeout(holdTimer);
         holdTimer = null;
@@ -110,7 +89,6 @@ function startSpeakingDetection(
         onSpeaking(true);
       }
     } else if (speaking && holdTimer === null) {
-      // Silence detected — hold the speaking state open briefly before clearing
       holdTimer = setTimeout(() => {
         holdTimer = null;
         speaking = false;
@@ -120,7 +98,6 @@ function startSpeakingDetection(
     timer = setTimeout(poll, SPEAKING_POLL_MS);
   };
 
-  // Wait for the context to fully resume before starting the poll
   ctx.resume().then(poll).catch(poll);
 
   return () => {
@@ -129,7 +106,6 @@ function startSpeakingDetection(
     if (holdTimer !== null) clearTimeout(holdTimer);
     source.disconnect();
     ctx.close();
-    // Stop cloned tracks so they don't linger
     analyserStream.getTracks().forEach((t) => t.stop());
   };
 }
@@ -197,6 +173,11 @@ function startRemoteSpeakingDetection(
   };
 }
 
+export type VoiceError = {
+  type: "permission_denied" | "device_not_found" | "device_in_use" | "transport_failed" | "unknown";
+  message: string;
+};
+
 export function useVoice() {
   const deviceRef = useRef<MsTypes.Device | null>(null);
   const sendTransportRef = useRef<MsTypes.Transport | null>(null);
@@ -213,6 +194,9 @@ export function useVoice() {
   const peerQualityIntervalsRef = useRef<
     Map<string, ReturnType<typeof setInterval>>
   >(new Map());
+  const reconnectAttemptsRef = useRef(0);
+  const isReconnectingRef = useRef(false);
+  const socketRef = useRef<Socket | null>(null);
 
   const {
     addVoicePeer,
@@ -227,14 +211,48 @@ export function useVoice() {
     setAudioBitrateKbps,
     audioInputDeviceId,
     audioOutputDeviceId,
+    setVoiceError,
   } = useStore();
 
-  const joinVoice = useCallback(
-    async (socket: Socket, channelId: string) => {
-      if (!socket) return;
-      channelIdRef.current = channelId;
+  const cleanupVoice = useCallback(() => {
+    if (qualityIntervalRef.current != null) {
+      clearInterval(qualityIntervalRef.current);
+      qualityIntervalRef.current = null;
+    }
+    peerQualityIntervalsRef.current.forEach((interval) =>
+      clearInterval(interval),
+    );
+    peerQualityIntervalsRef.current.clear();
+    localSpeakingCleanupRef.current?.();
+    localSpeakingCleanupRef.current = null;
+    remoteSpeakingCleanupsRef.current.forEach((cleanup) => cleanup());
+    remoteSpeakingCleanupsRef.current.clear();
+    producerRef.current?.close();
+    producerRef.current = null;
+    consumersRef.current.forEach((c) => c.close());
+    consumersRef.current.clear();
+    audioElemsRef.current.forEach((el) => {
+      el.pause();
+      el.srcObject = null;
+    });
+    audioElemsRef.current.clear();
+    sendTransportRef.current?.close();
+    recvTransportRef.current?.close();
+    sendTransportRef.current = null;
+    recvTransportRef.current = null;
+    deviceRef.current = null;
+    setVoicePeers([]);
+    setLocalSpeaking(false);
+    setLocalConnectionQuality(null);
+  }, [setVoicePeers, setLocalSpeaking, setLocalConnectionQuality]);
 
-      // Resolve the local user's display name from the store
+  const joinVoice = useCallback(
+    async (socket: Socket, channelId: string): Promise<VoiceError | null> => {
+      if (!socket) return { type: "unknown", message: "No socket connection" };
+      channelIdRef.current = channelId;
+      socketRef.current = socket;
+      setVoiceError(null);
+
       const storeState = useStore.getState();
       const activeServer = storeState.activeServer;
       const session = activeServer
@@ -243,25 +261,30 @@ export function useVoice() {
       const username = session?.user.display_name ?? "Unknown";
       const userId = session?.user.id ?? "";
 
-      // 1. Join — server returns router RTP capabilities + already-producing peers
       const joinResult = await new Promise<{
         rtpCapabilities: MsTypes.RtpCapabilities;
         peers: { peerId: string; userId: string; username: string }[];
+        iceServers?: { urls: string; username?: string; credential?: string }[];
+        error?: string;
       }>((resolve) =>
         socket.emit("voice:join", { channelId, username, userId }, resolve),
       );
 
+      if (joinResult?.error) {
+        console.error("voice:join failed", joinResult.error);
+        return { type: "unknown", message: joinResult.error };
+      }
       if (!joinResult?.rtpCapabilities) {
         console.error("voice:join failed", joinResult);
-        return;
+        return { type: "unknown", message: "Failed to join voice channel" };
       }
 
-      // 2. Load mediasoup Device
       const device = new Device();
       await device.load({ routerRtpCapabilities: joinResult.rtpCapabilities });
       deviceRef.current = device;
 
-      // 3. Create send transport
+      const iceServers = joinResult.iceServers || [];
+
       const sendParams = await new Promise<MsTypes.TransportOptions>(
         (resolve) =>
           socket.emit(
@@ -270,7 +293,13 @@ export function useVoice() {
             resolve,
           ),
       );
-      const sendTransport = device.createSendTransport(sendParams);
+      if ((sendParams as any).error) {
+        return { type: "transport_failed", message: (sendParams as any).error };
+      }
+      const sendTransport = device.createSendTransport({
+        ...sendParams,
+        iceServers,
+      });
       sendTransportRef.current = sendTransport;
 
       sendTransport.on("connect", ({ dtlsParameters }, cb) => {
@@ -294,7 +323,13 @@ export function useVoice() {
         );
       });
 
-      // 4. Create recv transport
+      sendTransport.on("connectionstatechange", (state) => {
+        if (state === "failed" || state === "closed") {
+          console.error("Send transport connection state:", state);
+          handleTransportFailure(socket, channelId);
+        }
+      });
+
       const recvParams = await new Promise<MsTypes.TransportOptions>(
         (resolve) =>
           socket.emit(
@@ -303,7 +338,13 @@ export function useVoice() {
             resolve,
           ),
       );
-      const recvTransport = device.createRecvTransport(recvParams);
+      if ((recvParams as any).error) {
+        return { type: "transport_failed", message: (recvParams as any).error };
+      }
+      const recvTransport = device.createRecvTransport({
+        ...recvParams,
+        iceServers,
+      });
       recvTransportRef.current = recvTransport;
 
       recvTransport.on("connect", ({ dtlsParameters }, cb) => {
@@ -314,9 +355,13 @@ export function useVoice() {
         );
       });
 
-      // 5. Register peer event listeners BEFORE producing so we never miss
-      //    a voice:newPeer event that arrives while we are in the mic/produce
-      //    async chain below.
+      recvTransport.on("connectionstatechange", (state) => {
+        if (state === "failed" || state === "closed") {
+          console.error("Recv transport connection state:", state);
+          handleTransportFailure(socket, channelId);
+        }
+      });
+
       socket.on(
         "voice:newPeer",
         async (peer: { peerId: string; userId: string; username: string }) => {
@@ -354,7 +399,6 @@ export function useVoice() {
         removeVoicePeer(peerId);
       });
 
-      // Server-authoritative speaking indicators
       socket.on(
         "voice:peerSpeaking",
         ({ peerId, speaking }: { peerId: string; speaking: boolean }) => {
@@ -362,7 +406,6 @@ export function useVoice() {
         },
       );
 
-      // 6. Consume peers that were already producing when we joined
       for (const peer of joinResult.peers) {
         await consumePeer(
           socket,
@@ -380,8 +423,6 @@ export function useVoice() {
         });
       }
 
-      // 7. Get mic and produce — triggers voice:newPeer on other clients;
-      //    listeners above are already registered so nothing is missed.
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: audioInputDeviceId
@@ -396,7 +437,6 @@ export function useVoice() {
         });
         producerRef.current = producer;
 
-        // Start local speaking detection
         localSpeakingCleanupRef.current?.();
         localSpeakingCleanupRef.current = startSpeakingDetection(
           stream,
@@ -405,11 +445,38 @@ export function useVoice() {
             socket.emit("voice:speaking", { channelId, speaking });
           },
         );
-      } catch (err) {
-        console.error("Mic access denied", err);
+      } catch (err: any) {
+        console.error("Microphone access error", err);
+        let voiceError: VoiceError;
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          voiceError = {
+            type: "permission_denied",
+            message: "Microphone access was denied. Please allow microphone access in your browser settings and try again.",
+          };
+        } else if (err.name === "NotFoundError") {
+          voiceError = {
+            type: "device_not_found",
+            message: "No microphone found. Please connect a microphone and try again.",
+          };
+        } else if (err.name === "NotReadableError" || err.name === "OverconstrainedError") {
+          voiceError = {
+            type: "device_in_use",
+            message: "Microphone is being used by another application. Please close other apps using the microphone.",
+          };
+        } else {
+          voiceError = {
+            type: "unknown",
+            message: `Failed to access microphone: ${err.message || "Unknown error"}`,
+          };
+        }
+        setVoiceError(voiceError.message);
+        cleanupVoice();
+        socket.emit("voice:leave", { channelId });
+        channelIdRef.current = null;
+        socketRef.current = null;
+        return voiceError;
       }
 
-      // Start polling local connection quality — fire immediately then repeat
       if (qualityIntervalRef.current != null)
         clearInterval(qualityIntervalRef.current);
       const pollLocalQuality = async () => {
@@ -426,6 +493,9 @@ export function useVoice() {
         pollLocalQuality,
         QUALITY_POLL_MS,
       );
+
+      reconnectAttemptsRef.current = 0;
+      return null;
     },
     [
       addVoicePeer,
@@ -433,10 +503,48 @@ export function useVoice() {
       updateVoicePeer,
       setLocalSpeaking,
       setLocalConnectionQuality,
+      setVoiceError,
+      cleanupVoice,
       audioBitrateKbps,
       audioInputDeviceId,
       audioOutputDeviceId,
     ],
+  );
+
+  const handleTransportFailure = useCallback(
+    (socket: Socket, channelId: string) => {
+      if (isReconnectingRef.current) return;
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        console.error("Max reconnect attempts reached");
+        setVoiceError("Connection lost. Please rejoin the voice channel.");
+        cleanupVoice();
+        return;
+      }
+      isReconnectingRef.current = true;
+      reconnectAttemptsRef.current++;
+      console.log(
+        `Attempting voice reconnect (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`,
+      );
+      setTimeout(async () => {
+        if (!socket.connected) {
+          isReconnectingRef.current = false;
+          return;
+        }
+        cleanupVoice();
+        try {
+          const error = await joinVoice(socket, channelId);
+          if (error) {
+            console.error("Reconnect failed:", error);
+            setVoiceError(error.message);
+          }
+        } catch (err) {
+          console.error("Reconnect error:", err);
+          setVoiceError("Failed to reconnect to voice channel.");
+        }
+        isReconnectingRef.current = false;
+      }, RECONNECT_DELAY_MS * reconnectAttemptsRef.current);
+    },
+    [joinVoice, cleanupVoice, setVoiceError],
   );
 
   const consumePeer = async (
@@ -460,7 +568,6 @@ export function useVoice() {
     const consumer = await recvTransport.consume(params);
     consumersRef.current.set(peerId, consumer);
 
-    // Resume server-side consumer so RTP starts flowing
     await new Promise<void>((resolve) =>
       socket.emit(
         "voice:resumeConsumer",
@@ -468,20 +575,18 @@ export function useVoice() {
         resolve,
       ),
     );
-    // Also resume the client-side consumer — mediasoup-client creates it
-    // paused (mirroring the server's paused:true) so the track is silent
-    // until this is called, regardless of what the server does.
     await consumer.resume();
 
-    // Route audio through HTMLAudioElement (reliable hardware output in Electron).
     const audioEl = new Audio();
     audioEl.autoplay = true;
     audioEl.srcObject = new MediaStream([consumer.track]);
-    if (audioOutputDeviceId) {
+    const storeState = useStore.getState();
+    const outputDeviceId = storeState.audioOutputDeviceId;
+    if (outputDeviceId) {
       try {
         await (
           audioEl as HTMLAudioElement & { setSinkId(id: string): Promise<void> }
-        ).setSinkId(audioOutputDeviceId);
+        ).setSinkId(outputDeviceId);
       } catch {
         /* setSinkId not supported or device unavailable — use default */
       }
@@ -491,14 +596,12 @@ export function useVoice() {
     });
     audioElemsRef.current.set(peerId, audioEl);
 
-    // Start remote speaking detection (shares the same track)
     const cleanupRemote = startRemoteSpeakingDetection(
       consumer.track,
       (speaking) => updateVoicePeer(peerId, { speaking }),
     );
     remoteSpeakingCleanupsRef.current.set(peerId, cleanupRemote);
 
-    // Poll per-peer connection quality — fire immediately then repeat
     const pollPeerQuality = async () => {
       const c = consumersRef.current.get(peerId);
       if (!c) return;
@@ -518,40 +621,14 @@ export function useVoice() {
 
   const leaveVoice = useCallback(
     (socket?: Socket) => {
-      if (qualityIntervalRef.current != null) {
-        clearInterval(qualityIntervalRef.current);
-        qualityIntervalRef.current = null;
-      }
-      peerQualityIntervalsRef.current.forEach((interval) =>
-        clearInterval(interval),
-      );
-      peerQualityIntervalsRef.current.clear();
-      localSpeakingCleanupRef.current?.();
-      localSpeakingCleanupRef.current = null;
-      remoteSpeakingCleanupsRef.current.forEach((cleanup) => cleanup());
-      remoteSpeakingCleanupsRef.current.clear();
-      producerRef.current?.close();
-      producerRef.current = null;
-      consumersRef.current.forEach((c) => c.close());
-      consumersRef.current.clear();
-      audioElemsRef.current.forEach((el) => {
-        el.pause();
-        el.srcObject = null;
-      });
-      audioElemsRef.current.clear();
-      sendTransportRef.current?.close();
-      recvTransportRef.current?.close();
-      sendTransportRef.current = null;
-      recvTransportRef.current = null;
-      deviceRef.current = null;
-      setVoicePeers([]);
-      setLocalSpeaking(false);
-      setLocalConnectionQuality(null);
+      cleanupVoice();
       if (socket)
         socket.emit("voice:leave", { channelId: channelIdRef.current });
       channelIdRef.current = null;
+      socketRef.current = null;
+      setVoiceError(null);
     },
-    [setVoicePeers, setLocalSpeaking, setLocalConnectionQuality],
+    [cleanupVoice, setVoiceError],
   );
 
   const toggleMute = useCallback(() => {
@@ -563,24 +640,17 @@ export function useVoice() {
     }
   }, [localMuted, setLocalMuted]);
 
-  /**
-   * Change the outgoing audio bitrate at runtime.
-   * Updates the producer's RTP encoding limit on the client and notifies the
-   * server to adjust its incoming bitrate cap on the matching transport.
-   */
   const setAudioBitrate = useCallback(
     (socket: Socket, kbps: number) => {
       setAudioBitrateKbps(kbps);
       const bps = kbps * 1000;
 
-      // Update the local producer encoding limit
       if (producerRef.current) {
         producerRef.current
           .setRtpEncodingParameters({ maxBitrate: bps })
           .catch(console.error);
       }
 
-      // Ask the server to apply the cap on its side too
       if (socket && sendTransportRef.current) {
         socket.emit("voice:setBitrate", {
           channelId: channelIdRef.current,

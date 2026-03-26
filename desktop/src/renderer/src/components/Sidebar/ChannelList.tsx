@@ -16,6 +16,7 @@ export default function ChannelList() {
     activeVoiceChannel,
     setActiveVoiceChannel,
     clearSession,
+    setActiveDMChannel,
   } = useStore();
   const hydrated = useStoreHydrated();
   const [showAuth, setShowAuth] = useState(false);
@@ -96,7 +97,10 @@ export default function ChannelList() {
             {textChannels.map((ch) => (
               <button
                 key={ch.id}
-                onClick={() => setActiveChannel(ch)}
+                onClick={() => {
+                  setActiveChannel(ch);
+                  setActiveDMChannel(null);
+                }}
                 className={`channel-item w-full ${activeChannel?.id === ch.id ? "active" : ""}`}
               >
                 <span className="text-brand-primary text-[10px]">&gt;</span>
@@ -116,11 +120,12 @@ export default function ChannelList() {
             {voiceChannels.map((ch) => (
               <button
                 key={ch.id}
-                onClick={() =>
+                onClick={() => {
                   setActiveVoiceChannel(
                     activeVoiceChannel?.id === ch.id ? null : ch,
-                  )
-                }
+                  );
+                  setActiveDMChannel(null);
+                }}
                 className={`channel-item w-full ${activeVoiceChannel?.id === ch.id ? "active" : ""}`}
               >
                 <span className="text-brand-primary text-[10px]">~</span>

@@ -123,12 +123,41 @@ function runMigrations(database) {
       permissions TEXT NOT NULL DEFAULT '{}',
       created_at INTEGER DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS dm_channels (
+      id TEXT PRIMARY KEY,
+      user1_id TEXT NOT NULL,
+      user2_id TEXT NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY (user1_id) REFERENCES users(id),
+      FOREIGN KEY (user2_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dm_channels_users ON dm_channels(user1_id, user2_id);
   `);
 
   // Add custom_role_id column to server_members — idempotent
   try {
     database.exec(
       `ALTER TABLE server_members ADD COLUMN custom_role_id TEXT DEFAULT NULL REFERENCES roles(id)`,
+    );
+  } catch {
+    // column already exists — safe to ignore
+  }
+
+  // Add last_message_at column to dm_channels — idempotent
+  try {
+    database.exec(
+      `ALTER TABLE dm_channels ADD COLUMN last_message_at INTEGER DEFAULT NULL`,
+    );
+  } catch {
+    // column already exists — safe to ignore
+  }
+
+  // Add channel_id column to direct_messages — idempotent
+  try {
+    database.exec(
+      `ALTER TABLE direct_messages ADD COLUMN channel_id TEXT DEFAULT NULL`,
     );
   } catch {
     // column already exists — safe to ignore

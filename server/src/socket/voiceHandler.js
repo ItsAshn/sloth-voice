@@ -26,6 +26,26 @@ const { getWorker } = require("../mediasoup/worker");
 const jwt = require("jsonwebtoken");
 const { getDb } = require("../db/database");
 
+function getIceServers() {
+  const servers = [];
+  const stunServers = (process.env.STUN_SERVERS ||"stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const url of stunServers) {
+    servers.push({ urls: url });
+  }
+  if (process.env.TURN_ENABLED === "true" && process.env.TURN_URL) {
+    const turnConfig = {
+      urls: process.env.TURN_URL,
+    };
+    if (process.env.TURN_USERNAME) turnConfig.username = process.env.TURN_USERNAME;
+    if (process.env.TURN_PASSWORD) turnConfig.credential = process.env.TURN_PASSWORD;
+    servers.push(turnConfig);
+  }
+  return servers;
+}
+
 // channelId -> { router, peers: Map<socketId, PeerState> }
 const voiceRooms = new Map();
 
@@ -108,7 +128,11 @@ function registerVoiceHandlers(io, socket) {
         `[voice] JOIN     | channel=${channelId} | user=${username} | existingPeers=${peers.length}`,
       );
 
-      callback({ rtpCapabilities: room.router.rtpCapabilities, peers });
+      callback({
+        rtpCapabilities: room.router.rtpCapabilities,
+        peers,
+        iceServers: getIceServers(),
+      });
     } catch (err) {
       console.error("voice:join error", err);
       callback({ error: err.message });

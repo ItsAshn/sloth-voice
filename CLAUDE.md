@@ -53,8 +53,7 @@ Copy `server/.env.example` to `server/.env`. Key vars:
 | Workflow               | Trigger                                     | Action                                                                     |
 | ---------------------- | ------------------------------------------- | -------------------------------------------------------------------------- |
 | `pr-build.yml`         | PR to `master`                              | Validates server deps + builds desktop (Windows + macOS) — no artifacts uploaded (free tier) |
-| `release.yml`          | Tag push `v*`                               | Multi-platform desktop installers → GitHub Release                         |
-| `server-publish.yml`   | Tag push `server-v*` or `workflow_dispatch` | Builds and publishes server Docker image to GHCR                           |
+| `release.yml`          | Tag push `v*`                               | Multi-platform desktop installers + Docker image (ghcr.io) → GitHub Release |
 
 ## Key Gotchas
 

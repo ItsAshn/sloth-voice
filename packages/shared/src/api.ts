@@ -217,3 +217,98 @@ export async function updateRole(
 export async function deleteRole(id: string): Promise<void> {
   await client().delete(`/api/roles/${id}`);
 }
+
+// Invite join (for existing users)
+export async function joinWithInvite(
+  serverUrl: string,
+  code: string,
+): Promise<{ ok: boolean; alreadyMember: boolean }> {
+  const res = await axios.post(
+    `${serverUrl.replace(/\/$/, "")}/api/server/join/${code.toUpperCase()}`,
+    {},
+    _token ? { headers: { Authorization: `Bearer ${_token}` } } : {},
+  );
+  return res.data;
+}
+
+// Direct Messages
+export async function fetchDMChannels(): Promise<DMChannel[]> {
+  const res = await client().get("/api/dms");
+  return res.data.channels ?? res.data;
+}
+
+export async function getOrCreateDMChannel(
+  userId: string,
+): Promise<DMChannel> {
+  const res = await client().get(`/api/dms/${userId}`);
+  return res.data.channel;
+}
+
+export async function fetchDMMessages(
+  channelId: string,
+  limit = 50,
+): Promise<Message[]> {
+  const res = await client().get(`/api/dms/channel/${channelId}/messages`, {
+    params: { limit },
+  });
+  return res.data.messages ?? res.data;
+}
+
+export async function sendDMMessage(
+  channelId: string,
+  content: string,
+): Promise<Message> {
+  const res = await client().post(
+    `/api/dms/channel/${channelId}/messages`,
+    { content },
+  );
+  return res.data.message ?? res.data;
+}
+
+// Attachments (file uploads)
+export async function uploadAttachment(
+  channelId: string,
+  file: File,
+): Promise<FileAttachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${_baseUrl}/api/attachments/${channelId}`, {
+    method: "POST",
+    headers: _token ? { Authorization: `Bearer ${_token}` } : {},
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Upload failed" }));
+    throw new Error(error.error || "Upload failed");
+  }
+
+  const data = await response.json();
+  return data.attachment;
+}
+
+export async function fetchAttachments(messageId: string): Promise<FileAttachment[]> {
+  const res = await client().get(`/api/attachments/message/${messageId}`);
+  return res.data.attachments ?? res.data;
+}
+
+interface DMChannel {
+  id: string;
+  other_user_id: string;
+  other_username: string;
+  other_display_name: string;
+  other_avatar: string | null;
+  created_at: number;
+  last_message_at: number | null;
+}
+
+interface FileAttachment {
+  id: string;
+  message_id: string;
+  filename: string;
+  url: string;
+  size: number;
+  content_type?: string;
+  created_at: number;
+}

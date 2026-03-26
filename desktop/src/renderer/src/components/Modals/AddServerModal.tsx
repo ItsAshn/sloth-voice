@@ -1,14 +1,22 @@
 import { useState, useEffect } from "react";
-import { fetchServerInfo } from "../../api/server";
+import { fetchServerInfo, joinWithInvite } from "../../api/server";
 import type { SavedServer } from "../../types";
 
 interface Props {
   onClose: () => void;
   onAdded: (server: SavedServer) => void;
+  initialUrl?: string;
+  initialInviteCode?: string;
 }
 
-export default function AddServerModal({ onClose, onAdded }: Props) {
-  const [url, setUrl] = useState("");
+export default function AddServerModal({
+  onClose,
+  onAdded,
+  initialUrl = "",
+  initialInviteCode = "",
+}: Props) {
+  const [url, setUrl] = useState(initialUrl);
+  const [inviteCode, setInviteCode] = useState(initialInviteCode);
   const [step, setStep] = useState<"url" | "preview">("url");
   const [serverInfo, setServerInfo] = useState<{
     name: string;
@@ -26,8 +34,14 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const handleLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (initialUrl && initialInviteCode) {
+      handleLookup(new Event("submit") as any);
+    }
+  }, []);
+
+  const handleLookup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError("");
     setLoading(true);
     try {
@@ -85,13 +99,29 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
                 required
               />
             </div>
+            <div>
+              <label className="label-xs">
+                invite code <span className="text-text-muted">(optional)</span>
+              </label>
+              <input
+                className="input-field font-mono uppercase"
+                placeholder="ABCD1234"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                maxLength={8}
+              />
+              <p className="text-text-muted text-[10px] mt-1">
+                If you have an invite code, enter it here to auto-join after
+                connecting.
+              </p>
+            </div>
             {error && <p className="text-danger text-xs font-mono">{error}</p>}
             <div className="flex gap-2 justify-end pt-2">
               <button type="button" onClick={onClose} className="btn-ghost">
                 cancel
               </button>
               <button type="submit" disabled={loading} className="btn-primary">
-                {loading ? "looking up…" : "next →"}
+                {loading ? "looking up..." : "next →"}
               </button>
             </div>
           </form>
@@ -122,6 +152,17 @@ export default function AddServerModal({ onClose, onAdded }: Props) {
                   )}
                 </div>
               </div>
+              {inviteCode && (
+                <div className="bg-brand-primary/5 border border-brand-primary/20 rounded p-3">
+                  <p className="text-text-muted text-[10px] font-mono">
+                    invite code: <span className="text-brand-primary">{inviteCode}</span>
+                  </p>
+                  <p className="text-text-muted text-[10px] mt-1">
+                    After connecting, the invite code will be applied
+                    automatically.
+                  </p>
+                </div>
+              )}
               {error && (
                 <p className="text-danger text-xs font-mono">{error}</p>
               )}
