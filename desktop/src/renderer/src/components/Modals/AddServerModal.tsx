@@ -40,12 +40,21 @@ export default function AddServerModal({
     }
   }, []);
 
+  const normalizeUrl = (input: string): string => {
+    const trimmed = input.trim();
+    if (!trimmed) return trimmed;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `http://${trimmed}`;
+  };
+
   const handleLookup = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const info = await fetchServerInfo(url.trim());
+      const normalizedUrl = normalizeUrl(url);
+      setUrl(normalizedUrl);
+      const info = await fetchServerInfo(normalizedUrl);
       setServerInfo(info);
       setStep("preview");
     } catch {
@@ -58,10 +67,11 @@ export default function AddServerModal({
   const handleAdd = async () => {
     if (!serverInfo) return;
     try {
+      const normalizedUrl = normalizeUrl(url);
       const newEntry: import("../../types").SavedServer = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: serverInfo.name,
-        url: url.trim(),
+        url: normalizedUrl,
         addedAt: Date.now(),
       };
       // IPC returns the full updated SavedServer[]
