@@ -34,6 +34,11 @@ function printBanner() {
 }
 
 function checkEnvFile() {
+  // Skip check if running in Docker with env vars already set
+  if (process.env.JWT_SECRET) {
+    return;
+  }
+
   const envPath = path.join(__dirname, "..", ".env");
   const envExamplePath = path.join(__dirname, "..", ".env.example");
 
