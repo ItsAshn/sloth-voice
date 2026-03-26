@@ -7,3 +7,5 @@ dist/
 out/
 .DS_Store
 Thumbs.db
+.expo/
+mobile/.expo/
