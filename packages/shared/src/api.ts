@@ -78,6 +78,27 @@ export async function fetchServerInfo(serverUrl: string) {
   };
 }
 
+export async function resolveInviteCode(
+  code: string,
+): Promise<{ serverUrl: string; name: string; description: string }> {
+  const parts = code.toUpperCase().split(".");
+  if (parts.length !== 2) {
+    throw new Error("Invalid invite code format");
+  }
+  const [encodedUrl] = parts;
+  let serverUrl: string;
+  try {
+    serverUrl = atob(encodedUrl.replace(/-/g, "+").replace(/_/g, "/"));
+  } catch {
+    throw new Error("Invalid invite code format");
+  }
+  const res = await axios.get(
+    `${serverUrl.replace(/\/$/, "")}/api/server/resolve/${code.toUpperCase()}`,
+    { timeout: 8000 },
+  );
+  return res.data;
+}
+
 // Channels
 export async function fetchChannels(): Promise<Channel[]> {
   const res = await client().get("/api/channels");

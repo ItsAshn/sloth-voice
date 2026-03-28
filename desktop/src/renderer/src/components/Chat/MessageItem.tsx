@@ -181,13 +181,22 @@ export default function MessageItem({ message, currentUserId }: Props) {
   const { text, attachments } = parseAttachments(message.content);
 
   return (
-    <div
-      className={`group flex gap-3 px-2 py-1.5 rounded hover:bg-surface-highest/40 transition-colors ${
+    <div className={`group flex gap-3 px-2 py-1.5 rounded hover:bg-surface-highest/40 transition-colors ${
         isOwn ? "flex-row-reverse" : ""
       }`}
     >
-      <div className="w-7 h-7 rounded bg-brand-primary/20 border border-brand-primary/30 flex items-center justify-center text-[11px] font-bold text-brand-primary shrink-0 mt-0.5">
-        {displayName.slice(0, 1).toUpperCase()}
+      <div className="w-7 h-7 rounded bg-brand-primary/20 border border-brand-primary/30 flex items-center justify-center text-[11px] font-bold text-brand-primary shrink-0 mt-0.5 overflow-hidden relative">
+        <span>{displayName.slice(0, 1).toUpperCase()}</span>
+        {message.avatar && (
+          <img
+            src={message.avatar}
+            alt="avatar"
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        )}
       </div>
       <div
         className={`flex flex-col flex-1 min-w-0 ${isOwn ? "items-end" : ""}`}

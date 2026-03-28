@@ -13,18 +13,28 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useStore } from "../store/useStore";
-import { fetchServerInfo } from "../api/server";
+import { fetchServerInfo, resolveInviteCode } from "../api/server";
 import type { RootStackParamList } from "../../App";
 import type { SavedServer } from "../types";
 import { C } from "../theme/colors";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
 
+function isInviteCode(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  const parts = trimmed.split(".");
+  if (parts.length !== 2) return false;
+  const [encoded, token] = parts;
+  const base64urlPattern = /^[A-Za-z0-9_-]+$/;
+  return base64urlPattern.test(encoded) && base64urlPattern.test(token);
+}
+
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { savedServers, addServer, removeServer, sessions } = useStore();
   const [showAdd, setShowAdd] = useState(false);
-  const [url, setUrl] = useState("");
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -41,24 +51,48 @@ export default function HomeScreen() {
     }
   };
 
+  const normalizeUrl = (url: string): string => {
+    const trimmed = url.trim();
+    if (!trimmed) return trimmed;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `http://${trimmed}`;
+  };
+
   const handleAdd = async () => {
     setError("");
     setLoading(true);
     try {
-      const info = await fetchServerInfo(url.trim());
+      const trimmed = input.trim();
+      let serverUrl: string;
+      let name: string;
+
+      if (isInviteCode(trimmed)) {
+        const resolved = await resolveInviteCode(trimmed);
+        serverUrl = resolved.serverUrl;
+        name = resolved.name;
+      } else {
+        serverUrl = normalizeUrl(trimmed);
+        const info = await fetchServerInfo(serverUrl);
+        name = info.name;
+      }
+
       const saved = await addServer({
-        name: info.name,
-        url: url.trim(),
+        name,
+        url: serverUrl,
       });
       setShowAdd(false);
-      setUrl("");
+      setInput("");
       nav.navigate("Auth", {
         serverId: saved.id,
         serverUrl: saved.url,
         serverName: saved.name,
       });
     } catch {
-      setError("Could not reach server. Check the URL.");
+      setError(
+        isInviteCode(input.trim())
+          ? "Invalid or expired invite code."
+          : "Could not reach server. Check the URL or code."
+      );
     } finally {
       setLoading(false);
     }
@@ -83,7 +117,7 @@ export default function HomeScreen() {
               No servers yet
             </Text>
             <Text style={{ color: C.muted, textAlign: "center" }}>
-              Tap + to add a server by URL.
+              Tap + to add a server by URL or invite code.
             </Text>
           </View>
         }
@@ -133,13 +167,15 @@ export default function HomeScreen() {
             <Text style={[styles.modalTitle, { color: C.text }]}>
               Add a Server
             </Text>
-            <Text style={[styles.label, { color: C.muted }]}>SERVER URL</Text>
+            <Text style={[styles.label, { color: C.muted }]}>
+              SERVER URL OR INVITE CODE
+            </Text>
             <TextInput
               style={[styles.input, { backgroundColor: C.low, color: C.text }]}
-              placeholder="http://192.168.1.100:5000"
+              placeholder="http://192.168.1.100:5000 or code"
               placeholderTextColor={C.muted}
-              value={url}
-              onChangeText={setUrl}
+              value={input}
+              onChangeText={setInput}
               autoCapitalize="none"
               keyboardType="url"
             />
@@ -164,7 +200,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleAdd}
-                disabled={loading}
+                disabled={loading || !input.trim()}
                 style={[styles.btnPrimary, { backgroundColor: C.brand }]}
               >
                 {loading ? (

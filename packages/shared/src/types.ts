@@ -31,6 +31,7 @@ export interface Message {
   created_at: number;
   username?: string;
   display_name?: string;
+  avatar?: string;
 }
 
 export interface Member {

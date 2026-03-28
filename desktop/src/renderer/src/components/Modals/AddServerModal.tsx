@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchServerInfo, joinWithInvite } from "../../api/server";
+import { fetchServerInfo, resolveInviteCode } from "@sloth-voice/shared/api";
 import type { SavedServer } from "../../types";
 
 interface Props {
@@ -9,20 +9,30 @@ interface Props {
   initialInviteCode?: string;
 }
 
+function isInviteCode(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  const parts = trimmed.split(".");
+  if (parts.length !== 2) return false;
+  const [encoded, token] = parts;
+  const base64urlPattern = /^[A-Za-z0-9_-]+$/;
+  return base64urlPattern.test(encoded) && base64urlPattern.test(token);
+}
+
 export default function AddServerModal({
   onClose,
   onAdded,
   initialUrl = "",
   initialInviteCode = "",
 }: Props) {
-  const [url, setUrl] = useState(initialUrl);
-  const [inviteCode, setInviteCode] = useState(initialInviteCode);
-  const [step, setStep] = useState<"url" | "preview">("url");
+  const [input, setInput] = useState(initialUrl || initialInviteCode);
+  const [step, setStep] = useState<"input" | "preview">("input");
   const [serverInfo, setServerInfo] = useState<{
     name: string;
     description: string;
     passwordProtected: boolean;
   } | null>(null);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +45,7 @@ export default function AddServerModal({
   }, [onClose]);
 
   useEffect(() => {
-    if (initialUrl && initialInviteCode) {
+    if (initialUrl || initialInviteCode) {
       handleLookup(new Event("submit") as any);
     }
   }, []);
@@ -52,13 +62,28 @@ export default function AddServerModal({
     setError("");
     setLoading(true);
     try {
-      const normalizedUrl = normalizeUrl(url);
-      setUrl(normalizedUrl);
-      const info = await fetchServerInfo(normalizedUrl);
-      setServerInfo(info);
+      const trimmed = input.trim();
+      if (isInviteCode(trimmed)) {
+        const resolved = await resolveInviteCode(trimmed);
+        setResolvedUrl(resolved.serverUrl);
+        setServerInfo({
+          name: resolved.name,
+          description: resolved.description,
+          passwordProtected: false,
+        });
+      } else {
+        const normalizedUrl = normalizeUrl(trimmed);
+        setInput(normalizedUrl);
+        const info = await fetchServerInfo(normalizedUrl);
+        setServerInfo(info);
+      }
       setStep("preview");
     } catch {
-      setError("Could not reach server. Check the URL and try again.");
+      setError(
+        isInviteCode(trimmed)
+          ? "Invalid or expired invite code."
+          : "Could not reach server. Check the URL or code and try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -66,20 +91,19 @@ export default function AddServerModal({
 
   const handleAdd = async () => {
     if (!serverInfo) return;
+    const serverUrl = resolvedUrl || normalizeUrl(input);
     try {
-      const normalizedUrl = normalizeUrl(url);
       const newEntry: import("../../types").SavedServer = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: serverInfo.name,
-        url: normalizedUrl,
+        url: serverUrl,
         addedAt: Date.now(),
       };
-      // IPC returns the full updated SavedServer[]
       const result = await window.slothVoice?.addServer(newEntry);
       const servers = (result ??
         []) as unknown as import("../../types").SavedServer[];
       const newServer =
-        servers.find((s) => s.url === url.trim()) ??
+        servers.find((s) => s.url === serverUrl) ??
         servers[servers.length - 1] ??
         newEntry;
       onAdded(newServer);
@@ -87,6 +111,8 @@ export default function AddServerModal({
       setError(err.message);
     }
   };
+
+  const displayUrl = resolvedUrl || input;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -96,33 +122,19 @@ export default function AddServerModal({
         </p>
         <h2 className="modal-title">add a server</h2>
 
-        {step === "url" ? (
+        {step === "input" ? (
           <form onSubmit={handleLookup} className="space-y-3">
             <div>
-              <label className="label-xs">server url</label>
+              <label className="label-xs">server url or invite code</label>
               <input
-                className="input-field"
-                placeholder="http://192.168.1.100:5000"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                className="input-field font-mono"
+                placeholder="http://192.168.1.100:5000 or invite code"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
                 autoFocus
-                required
-              />
-            </div>
-            <div>
-              <label className="label-xs">
-                invite code <span className="text-text-muted">(optional)</span>
-              </label>
-              <input
-                className="input-field font-mono uppercase"
-                placeholder="ABCD1234"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                maxLength={8}
               />
               <p className="text-text-muted text-[10px] mt-1">
-                If you have an invite code, enter it here to auto-join after
-                connecting.
+                Enter a server URL or paste an invite code to join directly.
               </p>
             </div>
             {error && <p className="text-danger text-xs font-mono">{error}</p>}
@@ -130,7 +142,11 @@ export default function AddServerModal({
               <button type="button" onClick={onClose} className="btn-ghost">
                 cancel
               </button>
-              <button type="submit" disabled={loading} className="btn-primary">
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="btn-primary"
+              >
                 {loading ? "looking up..." : "next →"}
               </button>
             </div>
@@ -152,7 +168,7 @@ export default function AddServerModal({
                     </p>
                   )}
                   <p className="text-text-muted text-[10px] mt-1 font-mono">
-                    {url}
+                    {displayUrl}
                   </p>
                   {serverInfo.passwordProtected && (
                     <p className="text-yellow-400 text-[10px] mt-1 font-mono">
@@ -162,22 +178,11 @@ export default function AddServerModal({
                   )}
                 </div>
               </div>
-              {inviteCode && (
-                <div className="bg-brand-primary/5 border border-brand-primary/20 rounded p-3">
-                  <p className="text-text-muted text-[10px] font-mono">
-                    invite code: <span className="text-brand-primary">{inviteCode}</span>
-                  </p>
-                  <p className="text-text-muted text-[10px] mt-1">
-                    After connecting, the invite code will be applied
-                    automatically.
-                  </p>
-                </div>
-              )}
               {error && (
                 <p className="text-danger text-xs font-mono">{error}</p>
               )}
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setStep("url")} className="btn-ghost">
+                <button onClick={() => setStep("input")} className="btn-ghost">
                   ← back
                 </button>
                 <button onClick={handleAdd} className="btn-primary">

@@ -7,9 +7,23 @@ import autoprefixer from "autoprefixer";
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        output: {
+          format: "cjs",
+        },
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        output: {
+          format: "cjs",
+        },
+      },
+    },
   },
   renderer: {
     root: "src/renderer",

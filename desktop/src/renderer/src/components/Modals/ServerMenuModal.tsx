@@ -880,9 +880,9 @@ export default function ServerMenuModal({ onClose }: Props) {
                           copy
                         </button>
                       </div>
-                      <p className="text-text-muted text-[10px] font-mono text-center">
-                        share this code or scan the QR to join the server
-                      </p>
+<p className="text-text-muted text-[10px] font-mono text-center">
+share this code — recipients can join using just the code
+</p>
                       <button
                         onClick={() => setActiveQr(null)}
                         className="text-text-muted hover:text-text-normal text-[10px] font-mono"

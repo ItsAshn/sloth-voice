@@ -166,6 +166,10 @@ router.post("/channel/:channelId/messages", requireAuth, (req, res) => {
     .prepare(`SELECT id, username, display_name FROM users WHERE id = ?`)
     .get(req.user.id);
 
+  if (!userRow) {
+    return res.status(500).json({ error: "Sender user record not found" });
+  }
+
   const id = uuidv4();
   const now = Math.floor(Date.now() / 1000);
 

@@ -8,6 +8,25 @@ const {
 const { getDb } = require("../db/database");
 const crypto = require("crypto");
 
+function getServerUrl() {
+  if (process.env.SERVER_URL) return process.env.SERVER_URL;
+  const host = process.env.PUBLIC_ADDRESS || "127.0.0.1";
+  const port = process.env.SERVER_PORT || "5000";
+  return `http://${host}:${port}`;
+}
+
+function encodeServerUrl(url) {
+  return Buffer.from(url).toString("base64url");
+}
+
+function decodeServerUrl(encoded) {
+  try {
+    return Buffer.from(encoded, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
 // GET /api/server/info — public info shown before joining
 router.get("/info", (_req, res) => {
   const db = getDb();
@@ -22,6 +41,45 @@ router.get("/info", (_req, res) => {
     passwordProtected: !!(
       process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
     ),
+  });
+});
+
+// GET /api/server/resolve/:code — public, resolve invite code to server URL
+// This allows clients to join by code alone without knowing the server URL
+router.get("/resolve/:code", (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const parts = code.split(".");
+  if (parts.length !== 2) {
+    return res.status(400).json({ error: "Invalid invite code format" });
+  }
+  const [encodedUrl, token] = parts;
+  const serverUrl = decodeServerUrl(encodedUrl);
+  if (!serverUrl) {
+    return res.status(400).json({ error: "Invalid invite code format" });
+  }
+  const db = getDb();
+  const now = Math.floor(Date.now() / 1000);
+  const invite = db
+    .prepare(
+      `SELECT * FROM invite_codes
+       WHERE code = ?
+         AND (expires_at IS NULL OR expires_at > ?)
+         AND (max_uses IS NULL OR uses < max_uses)`,
+    )
+    .get(token, now);
+  if (!invite) {
+    return res
+      .status(404)
+      .json({ error: "Invite code is invalid, expired, or exhausted" });
+  }
+  const nameSetting = db
+    .prepare("SELECT value FROM server_settings WHERE key = 'name'")
+    .get();
+  return res.json({
+    serverUrl,
+    name: nameSetting?.value || process.env.SERVER_NAME || "Sloth Voice Server",
+    description:
+      process.env.SERVER_DESCRIPTION || "A locally-hosted Sloth Voice server",
   });
 });
 
@@ -71,12 +129,14 @@ router.post(
     const { maxUses, expiresInHours } = req.body;
     const db = getDb();
 
-    // Generate a cryptographically random 8-char alphanumeric code
-    const code = crypto
+    const token = crypto
       .randomBytes(6)
       .toString("base64url")
       .slice(0, 8)
       .toUpperCase();
+    const serverUrl = getServerUrl();
+    const encodedUrl = encodeServerUrl(serverUrl);
+    const code = `${encodedUrl}.${token}`;
     const expiresAt =
       expiresInHours && expiresInHours > 0
         ? Math.floor(Date.now() / 1000) + Math.round(expiresInHours * 3600)
@@ -85,9 +145,9 @@ router.post(
 
     db.prepare(
       "INSERT INTO invite_codes (code, created_by, max_uses, expires_at) VALUES (?, ?, ?, ?)",
-    ).run(code, req.user.id, max, expiresAt);
+    ).run(token, req.user.id, max, expiresAt);
 
-    return res.status(201).json({ code, maxUses: max, expiresAt, uses: 0 });
+    return res.status(201).json({ code, serverUrl, maxUses: max, expiresAt, uses: 0 });
   },
 );
 
@@ -111,7 +171,13 @@ router.get(
        ORDER BY created_at DESC`,
       )
       .all(now);
-    return res.json({ invites: rows });
+    const serverUrl = getServerUrl();
+    const encodedUrl = encodeServerUrl(serverUrl);
+    const invites = rows.map((row) => ({
+      ...row,
+      code: `${encodedUrl}.${row.code}`,
+    }));
+    return res.json({ invites });
   },
 );
 
@@ -125,9 +191,10 @@ router.delete(
   requirePermission("manage_invites"),
   (req, res) => {
     const db = getDb();
-    db.prepare("DELETE FROM invite_codes WHERE code = ?").run(
-      req.params.code.toUpperCase(),
-    );
+    const code = req.params.code.toUpperCase();
+    const parts = code.split(".");
+    const token = parts.length === 2 ? parts[1] : code;
+    db.prepare("DELETE FROM invite_codes WHERE code = ?").run(token);
     return res.json({ ok: true });
   },
 );
@@ -141,6 +208,8 @@ router.post("/join/:code", requireAuth, (req, res) => {
   const db = getDb();
   const now = Math.floor(Date.now() / 1000);
   const code = req.params.code.toUpperCase();
+  const parts = code.split(".");
+  const token = parts.length === 2 ? parts[1] : code;
 
   const invite = db
     .prepare(
@@ -149,7 +218,7 @@ router.post("/join/:code", requireAuth, (req, res) => {
          AND (expires_at IS NULL OR expires_at > ?)
          AND (max_uses IS NULL OR uses < max_uses)`,
     )
-    .get(code, now);
+    .get(token, now);
 
   if (!invite) {
     return res
@@ -170,7 +239,7 @@ router.post("/join/:code", requireAuth, (req, res) => {
 
   // Increment usage counter
   db.prepare("UPDATE invite_codes SET uses = uses + 1 WHERE code = ?").run(
-    code,
+    token,
   );
 
   return res.json({ ok: true, alreadyMember: !!existing });

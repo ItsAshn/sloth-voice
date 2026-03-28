@@ -16,8 +16,9 @@ function mapMessage(row) {
     user_id: row.author_id,
     username: row.author_username,
     display_name: row.display_name || row.author_username,
+    avatar: row.avatar || undefined,
     content: row.content,
-    created_at: row.created_at * 1000, // seconds → milliseconds
+    created_at: row.created_at * 1000,
     edited_at: row.edited_at ? row.edited_at * 1000 : null,
   };
 }
@@ -30,7 +31,7 @@ router.get("/:channelId", (req, res) => {
   const db = getDb();
 
   const SELECT = `
-    SELECT m.*, u.display_name
+    SELECT m.*, u.display_name, u.avatar
     FROM messages m
     LEFT JOIN users u ON m.author_id = u.id
     WHERE m.channel_id = ?`;

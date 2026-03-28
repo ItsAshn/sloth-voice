@@ -3,7 +3,8 @@
   "version": "0.9.0",
   "description": "Sloth Voice desktop client",
   "type": "module",
-  "main": "out/main/index.js",
+  "main": "out/main/index.cjs",
+  "asar": true,
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -47,7 +48,8 @@
       "output": "dist"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "package.json"
     ],
     "publish": {
       "provider": "github",

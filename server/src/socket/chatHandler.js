@@ -166,11 +166,25 @@ function registerChatHandlers(io, socket) {
        VALUES (?, ?, ?, ?, ?)`,
       ).run(id, channelId, authorId, authorUsername, content.trim());
 
-      const message = db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
-      // Broadcast to channel members (normal chat)
+      const row = db
+        .prepare(
+          `SELECT m.*, u.display_name, u.avatar
+           FROM messages m
+           LEFT JOIN users u ON m.author_id = u.id
+           WHERE m.id = ?`,
+        )
+        .get(id);
+      const message = {
+        id: row.id,
+        channel_id: row.channel_id,
+        user_id: row.author_id,
+        username: row.author_username,
+        display_name: row.display_name || row.author_username,
+        avatar: row.avatar || undefined,
+        content: row.content,
+        created_at: row.created_at * 1000,
+      };
       io.to(channelId).emit("message:new", message);
-      // Also forward to background-notification subscribers so they get it
-      // even when they haven't joined the specific channel room
       io.to(NOTIFICATION_ROOM).emit("message:new", message);
 
       // Parse and emit @mentions
