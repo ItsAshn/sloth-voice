@@ -29,6 +29,7 @@ COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application source
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY package.json ./
 
 # Create a non-root user for security
