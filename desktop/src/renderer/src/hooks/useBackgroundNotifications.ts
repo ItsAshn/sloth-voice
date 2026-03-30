@@ -15,6 +15,7 @@
 import { useEffect } from "react";
 import { useStore } from "../store/useStore";
 import { useStoreHydrated } from "./useStoreHydrated";
+import { fetchServerInfo } from "../api/server";
 import type { Message, Channel } from "../types";
 
 // Minimal inline type for the background-notification bridge
@@ -74,6 +75,7 @@ export function useBackgroundNotifications(): void {
   const activeServer = useStore((s) => s.activeServer);
   const incrementMentions = useStore((s) => s.incrementMentions);
   const clearMentions = useStore((s) => s.clearMentions);
+  const updateServerIcon = useStore((s) => s.updateServerIcon);
   const hydrated = useStoreHydrated();
 
   // Start / update watchers once the store is hydrated and whenever
@@ -99,6 +101,25 @@ export function useBackgroundNotifications(): void {
         });
     });
   }, [hydrated, savedServers, sessions]);
+
+  // Sync server icons from servers we have sessions for
+  useEffect(() => {
+    if (!hydrated) return;
+    savedServers.forEach((server) => {
+      const session = sessions[server.id];
+      if (!session?.token) return;
+
+      fetchServerInfo(server.url)
+        .then((info) => {
+          if (info.icon !== undefined && info.icon !== server.icon) {
+            updateServerIcon(server.id, info.icon);
+          }
+        })
+        .catch(() => {
+          // ignore errors - server might be unreachable
+        });
+    });
+  }, [hydrated, savedServers, sessions, updateServerIcon]);
 
   // Keep tokens / userIds fresh when sessions change
   useEffect(() => {

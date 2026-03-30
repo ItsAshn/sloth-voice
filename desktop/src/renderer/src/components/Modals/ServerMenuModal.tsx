@@ -101,8 +101,14 @@ export default function ServerMenuModal({ onClose }: Props) {
 
   // ─── Server settings ──────────────────────────────────────────────────────
   const [serverName, setServerName] = useState(activeServer?.name ?? "");
+  const [serverIconPreview, setServerIconPreview] = useState<string | null>(
+    activeServer?.icon ?? null,
+  );
+  const [serverIconChanged, setServerIconChanged] = useState(false);
   const [serverSaving, setServerSaving] = useState(false);
   const [serverMsg, setServerMsg] = useState<string | null>(null);
+  const serverIconFileRef = useRef<HTMLInputElement>(null);
+  const pendingServerIconFile = useRef<File | null>(null);
 
   // ─── Members ──────────────────────────────────────────────────────────────
   const [membersLoading, setMembersLoading] = useState(false);
@@ -218,6 +224,17 @@ export default function ServerMenuModal({ onClose }: Props) {
     e.target.value = "";
   };
 
+  const handleServerIconFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setServerMsg(null);
+    const objectUrl = URL.createObjectURL(file);
+    pendingServerIconFile.current = file;
+    setServerIconPreview(objectUrl);
+    setServerIconChanged(true);
+    e.target.value = "";
+  };
+
   /** Convert a File to a base64 data URL via FileReader */
   function fileToDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -263,22 +280,40 @@ export default function ServerMenuModal({ onClose }: Props) {
     }
   };
 
-  const handleSaveServerName = async () => {
+  const handleSaveServerSettings = async () => {
     if (!activeServer || !session) return;
     setServerSaving(true);
     setServerMsg(null);
     configureApi(activeServer.url, session.token);
     try {
-      const res = await updateServerSettings(serverName);
+      let iconPayload: string | null | undefined = undefined;
+      if (serverIconChanged) {
+        if (serverIconPreview === null) {
+          iconPayload = null;
+          pendingServerIconFile.current = null;
+        } else if (pendingServerIconFile.current) {
+          const dataUrl = await fileToDataUrl(pendingServerIconFile.current);
+          try {
+            iconPayload = await resizeImage(dataUrl, 512);
+          } catch {
+            iconPayload = dataUrl;
+          }
+        }
+      }
+      const res = await updateServerSettings(serverName, iconPayload);
       updateActiveServerName(res.name);
       setSavedServers(
         savedServers.map((s) =>
-          s.id === activeServer.id ? { ...s, name: res.name } : s,
+          s.id === activeServer.id
+            ? { ...s, name: res.name, ...(res.icon !== undefined && { icon: res.icon }) }
+            : s,
         ),
       );
+      setServerIconChanged(false);
+      pendingServerIconFile.current = null;
       setServerMsg("saved");
     } catch (err: unknown) {
-      setServerMsg(handleApiErr(err, "error saving server name"));
+      setServerMsg(handleApiErr(err, "error saving server settings"));
     } finally {
       setServerSaving(false);
     }
@@ -639,6 +674,57 @@ export default function ServerMenuModal({ onClose }: Props) {
               {/* ── Settings tab ── */}
               {adminTab === "settings" && (
                 <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded bg-brand-primary flex items-center justify-center text-white text-sm font-bold font-mono shrink-0 overflow-hidden cursor-pointer border border-surface-highest hover:border-brand-primary transition-colors relative"
+                      onClick={() => serverIconFileRef.current?.click()}
+                      title="click to change server icon"
+                    >
+                      <span>
+                        {(serverName || activeServer?.name || "?")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                      {serverIconPreview && (
+                        <img
+                          src={serverIconPreview}
+                          alt="server icon"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      <button
+                        onClick={() => serverIconFileRef.current?.click()}
+                        className="btn-ghost text-xs py-1"
+                      >
+                        upload image
+                      </button>
+                      {serverIconPreview && (
+                        <button
+                          onClick={() => {
+                            pendingServerIconFile.current = null;
+                            setServerIconPreview(null);
+                            setServerIconChanged(true);
+                          }}
+                          className="text-text-muted hover:text-danger text-[11px] font-mono transition-colors"
+                        >
+                          remove icon
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={serverIconFileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleServerIconFile}
+                    />
+                  </div>
                   <div className="space-y-1">
                     <label className="text-text-muted text-[10px] font-mono uppercase tracking-wider">
                       server name
@@ -652,11 +738,11 @@ export default function ServerMenuModal({ onClose }: Props) {
                   </div>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={handleSaveServerName}
+                      onClick={handleSaveServerSettings}
                       disabled={serverSaving}
                       className="btn-primary text-xs py-1 px-4"
                     >
-                      {serverSaving ? "…" : "save server name"}
+                      {serverSaving ? "…" : "save settings"}
                     </button>
                     {serverMsg && (
                       <span

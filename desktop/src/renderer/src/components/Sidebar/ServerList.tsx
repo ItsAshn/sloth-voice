@@ -14,6 +14,7 @@ export default function ServerList() {
     setActiveServer,
     mentionCounts,
     clearMentions,
+    sessions,
   } = useStore();
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
@@ -76,6 +77,7 @@ export default function ServerList() {
         {/* Saved servers */}
         {savedServers.map((s) => {
           const badgeCount = mentionCounts[s.id] ?? 0;
+          const isConnected = !!sessions[s.id]?.token;
           return (
             <div
               key={s.id}
@@ -101,6 +103,14 @@ export default function ServerList() {
                   s.name.slice(0, 2).toUpperCase()
                 )}
               </button>
+              {/* Connection status indicator */}
+              <span
+                className={`pointer-events-none absolute bottom-0 right-1 w-2 h-2 rounded-full border border-surface-lowest ${
+                  isConnected
+                    ? "bg-success"
+                    : "bg-surface-high"
+                }`}
+              />
               {/* Mention badge */}
               {badgeCount > 0 && (
                 <span

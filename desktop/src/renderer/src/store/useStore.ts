@@ -28,6 +28,7 @@ interface StoreState {
   activeServer: SavedServer | null;
   setActiveServer: (server: SavedServer | null) => void;
   updateActiveServerName: (name: string) => void;
+  updateServerIcon: (serverId: string, icon: string | null) => void;
 
   // per-server sessions (token + user keyed by serverId)
   sessions: Record<string, ServerSession>;
@@ -132,6 +133,16 @@ export const useStore = create<StoreState>()(
             ),
           };
         }),
+      updateServerIcon: (serverId, icon) =>
+        set((s) => ({
+          savedServers: s.savedServers.map((sv) =>
+            sv.id === serverId ? { ...sv, icon: icon ?? undefined } : sv,
+          ),
+          activeServer:
+            s.activeServer?.id === serverId
+              ? { ...s.activeServer, icon: icon ?? undefined }
+              : s.activeServer,
+        })),
 
       sessions: {},
       setSession: (serverId, session) =>

@@ -33,14 +33,17 @@ router.get("/info", (_req, res) => {
   const nameSetting = db
     .prepare("SELECT value FROM server_settings WHERE key = 'name'")
     .get();
+  const iconSetting = db
+    .prepare("SELECT value FROM server_settings WHERE key = 'icon'")
+    .get();
   return res.json({
     name: nameSetting?.value || process.env.SERVER_NAME || "Sloth Voice Server",
     description:
       process.env.SERVER_DESCRIPTION || "A locally-hosted Sloth Voice server",
-    // Tell clients whether a password is required, without revealing it
     passwordProtected: !!(
       process.env.SERVER_PASSWORD && process.env.SERVER_PASSWORD.trim()
     ),
+    icon: iconSetting?.value || null,
   });
 });
 
@@ -83,17 +86,43 @@ router.get("/resolve/:code", (req, res) => {
   });
 });
 
-// PATCH /api/server/settings — admin: update server name
+// PATCH /api/server/settings — admin: update server name and/or icon
 router.patch("/settings", requireAuth, requireAdmin, (req, res) => {
-  const { name } = req.body;
-  if (!name?.trim()) {
-    return res.status(400).json({ error: "name is required" });
-  }
+  const { name, icon } = req.body;
   const db = getDb();
-  db.prepare(
-    "INSERT INTO server_settings (key, value) VALUES ('name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  ).run(name.trim());
-  return res.json({ name: name.trim() });
+  
+  if (name !== undefined) {
+    if (!name?.trim()) {
+      return res.status(400).json({ error: "name cannot be empty" });
+    }
+    db.prepare(
+      "INSERT INTO server_settings (key, value) VALUES ('name', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(name.trim());
+  }
+  
+  if (icon !== undefined) {
+    if (icon !== null && typeof icon !== "string") {
+      return res.status(400).json({ error: "icon must be a string or null" });
+    }
+    if (icon === null) {
+      db.prepare("DELETE FROM server_settings WHERE key = 'icon'").run();
+    } else {
+      db.prepare(
+        "INSERT INTO server_settings (key, value) VALUES ('icon', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(icon);
+    }
+  }
+  
+  const nameSetting = db
+    .prepare("SELECT value FROM server_settings WHERE key = 'name'")
+    .get();
+  const iconSetting = db
+    .prepare("SELECT value FROM server_settings WHERE key = 'icon'")
+    .get();
+  return res.json({
+    name: nameSetting?.value || process.env.SERVER_NAME || "Sloth Voice Server",
+    icon: iconSetting?.value || null,
+  });
 });
 
 /**

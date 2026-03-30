@@ -75,6 +75,7 @@ export async function fetchServerInfo(serverUrl: string) {
     name: string;
     description: string;
     passwordProtected: boolean;
+    icon: string | null;
   };
 }
 
@@ -161,8 +162,9 @@ export async function updateProfile(
 // Server settings (admin)
 export async function updateServerSettings(
   name: string,
-): Promise<{ name: string }> {
-  const res = await client().patch("/api/server/settings", { name });
+  icon?: string | null,
+): Promise<{ name: string; icon: string | null }> {
+  const res = await client().patch("/api/server/settings", { name, icon });
   return res.data;
 }
 
