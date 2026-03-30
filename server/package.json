@@ -8,7 +8,8 @@
     "dev": "nodemon --exec \"node --experimental-sqlite\" src/index.js",
     "setup": "node --experimental-sqlite src/setup.js",
     "doctor": "node --experimental-sqlite src/doctor.js",
-    "migrate:pg": "node scripts/migrate-to-postgres.js"
+    "migrate:pg": "node scripts/migrate-to-postgres.js",
+    "db:reset": "node --experimental-sqlite scripts/reset-database.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

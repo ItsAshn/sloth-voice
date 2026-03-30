@@ -155,7 +155,7 @@ router.post("/channel/:channelId/messages", requireAuth, (req, res) => {
 
   const otherUserId = channel.user1_id === req.user.id ? channel.user2_id : channel.user1_id;
   const otherUser = db
-    .prepare(`SELECT id FROM server_members WHERE user_id = ?`)
+    .prepare(`SELECT 1 FROM server_members WHERE user_id = ?`)
     .get(otherUserId);
 
   if (!otherUser) {
