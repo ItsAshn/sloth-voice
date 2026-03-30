@@ -118,16 +118,22 @@ router.get("/message/:messageId", requireAuth, (req, res) => {
   });
 });
 
-// GET /api/attachments/:filename — serve an uploaded file
-router.get("/file/:filename", (req, res) => {
+// GET /api/attachments/file/:filename — serve an uploaded file (requires auth)
+router.get("/file/:filename", requireAuth, (req, res) => {
   const { filename } = req.params;
-  const filepath = path.join(UPLOADS_DIR, filename);
+  
+  const sanitizedFilename = path.basename(filename);
+  if (sanitizedFilename !== filename || filename.includes('..')) {
+    return res.status(400).json({ error: "Invalid filename" });
+  }
+  
+  const filepath = path.join(UPLOADS_DIR, sanitizedFilename);
 
   if (!fs.existsSync(filepath)) {
     return res.status(404).json({ error: "File not found" });
   }
 
-  const ext = path.extname(filename).toLowerCase();
+  const ext = path.extname(sanitizedFilename).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
     return res.status(403).json({ error: "File type not allowed" });
   }

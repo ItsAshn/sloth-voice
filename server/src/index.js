@@ -5,7 +5,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { initDb } = require("./db/database");
+const { initDb, initDbAsync } = require("./db/database");
 const { createWorker } = require("./mediasoup/worker");
 
 const authRoutes = require("./routes/auth");
@@ -15,6 +15,7 @@ const serverInfoRoutes = require("./routes/serverInfo");
 const roleRoutes = require("./routes/roles");
 const dmRoutes = require("./routes/dms");
 const attachmentRoutes = require("./routes/attachments");
+const { authLimiter, messageLimiter, uploadLimiter, apiLimiter } = require("./middleware/rateLimiter");
 const { registerChatHandlers } = require("./socket/chatHandler");
 const { registerVoiceHandlers } = require("./socket/voiceHandler");
 const { openPorts, registerShutdownHook } = require("./upnp");
@@ -72,14 +73,14 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/channels", channelRoutes);
-app.use("/api/messages", messageRoutes);
-app.use("/api/server", serverInfoRoutes);
-app.use("/api/roles", roleRoutes);
-app.use("/api/dms", dmRoutes);
-app.use("/api/attachments", attachmentRoutes);
+// Routes with rate limiting
+app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/channels", apiLimiter, channelRoutes);
+app.use("/api/messages", messageLimiter, messageRoutes);
+app.use("/api/server", apiLimiter, serverInfoRoutes);
+app.use("/api/roles", apiLimiter, roleRoutes);
+app.use("/api/dms", messageLimiter, dmRoutes);
+app.use("/api/attachments", uploadLimiter, attachmentRoutes);
 
 // Static file serving for uploads
 app.use("/uploads", express.static(uploadsDir));
@@ -139,11 +140,16 @@ async function start() {
 
   // Initialize database
   try {
-    initDb();
+    if (process.env.DB_TYPE === "postgres") {
+      await initDbAsync();
+    } else {
+      initDb();
+    }
     console.log("[✓] Database initialized");
   } catch (err) {
     console.error("[!] Failed to initialize database:", err.message);
-    console.error("    Check SERVER_DB_PATH in your .env file");
+    console.error("    Check SERVER_DB_PATH in your .env file (SQLite)");
+    console.error("    Or PG_HOST, PG_DATABASE, PG_USER, PG_PASSWORD (PostgreSQL)");
     process.exit(1);
   }
 

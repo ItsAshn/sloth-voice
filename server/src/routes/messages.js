@@ -1,4 +1,5 @@
 const router = require("express").Router();
+const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { getDb } = require("../db/database");
 const { parseMentions, processMentions } = require("../socket/chatHandler");
@@ -108,6 +109,11 @@ router.post(
 // PATCH /api/messages/:id
 router.patch("/:id", requireAuth, (req, res) => {
   const { content } = req.body;
+  if (!content?.trim())
+    return res.status(400).json({ error: "content required" });
+  if (content.length > 4000)
+    return res.status(400).json({ error: "Message too long (max 4000 characters)" });
+
   const db = getDb();
   const msg = db
     .prepare("SELECT * FROM messages WHERE id = ?")
@@ -116,14 +122,31 @@ router.patch("/:id", requireAuth, (req, res) => {
   if (msg.author_id !== req.user.id)
     return res.status(403).json({ error: "Forbidden" });
 
+  const now = Math.floor(Date.now() / 1000);
+  
+  // Save edit history
   db.prepare(
-    "UPDATE messages SET content = ?, edited_at = unixepoch() WHERE id = ?",
-  ).run(content, req.params.id);
+    `INSERT INTO message_edits (id, message_id, old_content, edited_by, edited_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(require("uuid").v4(), msg.id, msg.content, req.user.id, now);
+
+  // Update message
+  db.prepare(
+    "UPDATE messages SET content = ?, edited_at = ?, updated_at = ? WHERE id = ?",
+  ).run(content.trim(), now, now, req.params.id);
+  
   const updated = db
     .prepare("SELECT * FROM messages WHERE id = ?")
     .get(req.params.id);
-  req.io.to(msg.channel_id).emit("message:updated", updated);
-  return res.json({ message: updated });
+  
+  const out = mapMessage({
+    ...updated,
+    display_name: db.prepare("SELECT display_name FROM users WHERE id = ?").get(msg.author_id)?.display_name,
+  });
+  
+  req.io.to(msg.channel_id).emit("message:updated", out);
+  req.io.to("__notifications__").emit("message:updated", out);
+  return res.json({ message: out });
 });
 
 // DELETE /api/messages/:id
@@ -133,13 +156,34 @@ router.delete("/:id", requireAuth, (req, res) => {
     .prepare("SELECT * FROM messages WHERE id = ?")
     .get(req.params.id);
   if (!msg) return res.status(404).json({ error: "Not found" });
-  if (msg.author_id !== req.user.id)
-    return res.status(403).json({ error: "Forbidden" });
 
+  // Allow deletion by message author or users with delete_messages permission
+  const isOwner = msg.author_id === req.user.id;
+  const canDelete = isOwner || require("../middleware/auth").hasPermission(req.user, "delete_messages");
+  
+  if (!canDelete) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  // Delete attachments first
+  const attachments = db.prepare("SELECT * FROM attachments WHERE message_id = ?").all(msg.id);
+  for (const att of attachments) {
+    const filepath = path.join(process.env.UPLOADS_DIR || path.join(__dirname, "../../uploads"), path.basename(att.url));
+    try {
+      require("fs").unlinkSync(filepath);
+    } catch {
+      // File may not exist
+    }
+  }
+  db.prepare("DELETE FROM attachments WHERE message_id = ?").run(msg.id);
+  db.prepare("DELETE FROM message_edits WHERE message_id = ?").run(msg.id);
+  db.prepare("DELETE FROM mentions WHERE message_id = ?").run(msg.id);
   db.prepare("DELETE FROM messages WHERE id = ?").run(req.params.id);
+  
   req.io
     .to(msg.channel_id)
     .emit("message:deleted", { id: req.params.id, channelId: msg.channel_id });
+  req.io.to("__notifications__").emit("message:deleted", { id: req.params.id, channelId: msg.channel_id });
   return res.json({ ok: true });
 });
 

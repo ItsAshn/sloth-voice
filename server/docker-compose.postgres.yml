@@ -1,0 +1,33 @@
+# PostgreSQL configuration for Sloth Voice Server
+# Use this for larger deployments (100+ concurrent users)
+#
+# Usage:
+#   docker-compose up -d
+#   # Then set in .env:
+#   DB_TYPE=postgres
+#   PG_HOST=localhost
+#   PG_DATABASE=slothvoice
+#   PG_USER=slothvoice
+#   PG_PASSWORD=your_secure_password_here
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: slothvoice-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: slothvoice
+      POSTGRES_USER: slothvoice
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-change_me_to_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slothvoice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

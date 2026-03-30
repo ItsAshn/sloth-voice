@@ -7,42 +7,6 @@ const { requireAuth } = require("../middleware/auth");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Simple in-memory rate limiter for auth endpoints (per IP)
-const authAttempts = new Map(); // ip -> { count, resetAt }
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = 20; // max attempts per window
-
-function rateLimit(req, res, next) {
-  const ip = req.ip || req.socket.remoteAddress;
-  const now = Date.now();
-  const entry = authAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    authAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
-    return next();
-  }
-  if (entry.count >= RATE_LIMIT_MAX) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    res.set("Retry-After", String(retryAfter));
-    return res
-      .status(429)
-      .json({ error: "Too many attempts. Please try again later." });
-  }
-  entry.count++;
-  next();
-}
-
-// Periodically clean up expired entries (every 5 minutes)
-setInterval(
-  () => {
-    const now = Date.now();
-    for (const [ip, entry] of authAttempts) {
-      if (now > entry.resetAt) authAttempts.delete(ip);
-    }
-  },
-  5 * 60 * 1000,
-).unref();
-
-// Helper
 function signToken(user) {
   return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, {
     expiresIn: "30d",
@@ -50,7 +14,7 @@ function signToken(user) {
 }
 
 // POST /api/auth/register
-router.post("/register", rateLimit, async (req, res) => {
+router.post("/register", async (req, res) => {
   const { username, password, displayName, serverPassword } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });
@@ -113,7 +77,7 @@ router.post("/register", rateLimit, async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post("/login", rateLimit, async (req, res) => {
+router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.status(400).json({ error: "username and password required" });
@@ -221,12 +185,20 @@ router.patch("/profile", requireAuth, (req, res) => {
   });
 });
 
+// POST /api/auth/presence — update last_seen_at
+router.post("/presence", requireAuth, (req, res) => {
+  const db = getDb();
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare("UPDATE users SET last_seen_at = ? WHERE id = ?").run(now, req.user.id);
+  return res.json({ last_seen_at: now * 1000 });
+});
+
 // GET /api/auth/users  — list members (for contacts/friends within server)
 router.get("/users", (req, res) => {
   const db = getDb();
   const users = db
     .prepare(
-      `SELECT u.id, u.username, u.display_name, u.avatar,
+      `SELECT u.id, u.username, u.display_name, u.avatar, u.last_seen_at,
               COALESCE(m.role, 'member') as role,
               m.custom_role_id,
               r.name  AS custom_role_name,
@@ -237,7 +209,11 @@ router.get("/users", (req, res) => {
        ORDER BY u.username`,
     )
     .all();
-  return res.json({ users });
+  const formattedUsers = users.map((u) => ({
+    ...u,
+    last_seen_at: u.last_seen_at ? u.last_seen_at * 1000 : null,
+  }));
+  return res.json({ users: formattedUsers });
 });
 
 module.exports = router;

@@ -211,6 +211,78 @@ function registerChatHandlers(io, socket) {
     }
   });
 
+  // Mark channel as read (for read receipts)
+  socket.on("channel:read", ({ userId, channelId }, callback) => {
+    if (!userId || !channelId) return;
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    
+    db.prepare(
+      `INSERT INTO channel_reads (user_id, channel_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
+    ).run(userId, channelId, now);
+    
+    if (typeof callback === "function") {
+      callback({ success: true, last_read_at: now * 1000 });
+    }
+  });
+
+  // Mark DM channel as read
+  socket.on("dm:read", ({ userId, channelId }, callback) => {
+    if (!userId || !channelId) return;
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    
+    db.prepare(
+      `INSERT INTO dm_reads (user_id, channel_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
+    ).run(userId, channelId, now);
+    
+    // Notify the other user that their messages were read
+    const channel = db.prepare(`SELECT user1_id, user2_id FROM dm_channels WHERE id = ?`).get(channelId);
+    if (channel) {
+      const otherUserId = channel.user1_id === userId ? channel.user2_id : channel.user1_id;
+      socket.to(`user:${otherUserId}`).emit("dm:read", { channelId, readBy: userId, readAt: now * 1000 });
+    }
+    
+    if (typeof callback === "function") {
+      callback({ success: true, last_read_at: now * 1000 });
+    }
+  });
+
+  // Get unread message counts per channel
+  socket.on("channel:unread", ({ userId }, callback) => {
+    if (!userId || typeof callback !== "function") return;
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT cr.channel_id, cr.last_read_at
+         FROM channel_reads cr
+         WHERE cr.user_id = ?`,
+      )
+      .all(userId);
+    
+    const lastRead = new Map(rows.map(r => [r.channel_id, r.last_read_at]));
+    const channels = db.prepare(`SELECT id FROM channels WHERE type = 'text'`).all();
+    
+    const unreadCounts = {};
+    for (const ch of channels) {
+      const threshold = lastRead.get(ch.id) || 0;
+      const count = db
+        .prepare(
+          `SELECT COUNT(*) as count FROM messages WHERE channel_id = ? AND created_at > ?`,
+        )
+        .get(ch.id, threshold);
+      if (count.count > 0) {
+        unreadCounts[ch.id] = count.count;
+      }
+    }
+    
+    callback(unreadCounts);
+  });
+
   // Return unread mention counts per channel (so badge can reflect accurate state on reconnect)
   socket.on("mentions:unread", ({ userId }, callback) => {
     if (!userId || typeof callback !== "function") return;
@@ -260,11 +332,33 @@ function registerChatHandlers(io, socket) {
   socket.on("user:joined", ({ userId, username }) => {
     socket.userId = userId;
     socket.username = username;
+    
+    // Update last_seen_at for presence tracking
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      db.prepare("UPDATE users SET last_seen_at = ? WHERE id = ?").run(now, userId);
+    } catch {
+      // Ignore errors if user doesn't exist
+    }
+    
     socket.broadcast.emit("user:online", {
       userId,
       username,
       socketId: socket.id,
     });
+  });
+
+  // Presence update (call periodically to keep presence fresh)
+  socket.on("presence:heartbeat", ({ userId }) => {
+    if (!userId) return;
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      db.prepare("UPDATE users SET last_seen_at = ? WHERE id = ?").run(now, userId);
+    } catch {
+      // Ignore errors
+    }
   });
 
   socket.on("disconnect", () => {

@@ -13,6 +13,7 @@ export interface User {
   avatar?: string;
   created_at: number;
   role?: "admin" | "member";
+  last_seen_at?: number | null;
 }
 
 export interface Channel {
@@ -32,6 +33,16 @@ export interface Message {
   username?: string;
   display_name?: string;
   avatar?: string;
+  edited_at?: number | null;
+  updated_at?: number | null;
+}
+
+export interface MessageEdit {
+  id: string;
+  message_id: string;
+  old_content: string;
+  edited_by: string;
+  edited_at: number;
 }
 
 export interface Member {
