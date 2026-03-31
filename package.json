@@ -1,6 +1,6 @@
 {
   "name": "sloth-voice",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "description": "Sloth Voice — self-hosted Discord alternative (desktop + mobile)",
   "private": true,
   "scripts": {
