@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { useStore } from "../../store/useStore";
-import { deleteMessage, configureApi } from "../../api/server";
+import { deleteMessage } from "@sloth-voice/shared/api";
 import type { Message } from "../../types";
 
 interface Props {
@@ -171,8 +171,7 @@ export default function MessageItem({ message, currentUserId }: Props) {
 
   const handleDelete = async () => {
     if (!activeServer || !session) return;
-    configureApi(activeServer.url, session.token);
-    await deleteMessage(message.id);
+    await deleteMessage(activeServer.url, session.token, message.id);
     setMessages(messages.filter((m) => m.id !== message.id));
   };
 

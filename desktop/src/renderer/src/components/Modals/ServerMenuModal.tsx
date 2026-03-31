@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useStore } from "../../store/useStore";
 import {
-  configureApi,
   updateProfile,
   updateServerSettings,
   fetchMembers,
@@ -16,7 +15,7 @@ import {
   createRole,
   updateRole,
   deleteRole,
-} from "../../api/server";
+} from "@sloth-voice/shared/api";
 import type { InviteCode, Member, CustomRole, Permission } from "../../types";
 
 /** Resize an image dataURL to at most maxPx on the longest side, JPEG quality 0.82 */
@@ -148,36 +147,18 @@ export default function ServerMenuModal({ onClose }: Props) {
     {},
   );
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
-  function ensureApi() {
-    if (!activeServer || !session) return false;
-    configureApi(activeServer.url, session.token);
-    return true;
-  }
-
-  function handleApiErr(err: unknown, fallback: string): string {
-    if ((err as { response?: { status?: number } })?.response?.status === 401) {
-      if (activeServer) clearSession(activeServer.id);
-      onClose();
-      return fallback;
-    }
-    return (
-      (err as { response?: { data?: { error?: string } } })?.response?.data
-        ?.error ?? fallback
-    );
-  }
+  const serverUrl = activeServer?.url;
+  const token = session?.token;
 
   // ─── Load data when admin tabs become active ───────────────────────────────
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !serverUrl || !token) return;
     if (adminTab === "members") {
-      if (!ensureApi()) return;
       setMembersLoading(true);
-      fetchMembers()
+      fetchMembers(serverUrl, token)
         .then((ms) => setMembers(ms))
         .catch(console.error)
         .finally(() => setMembersLoading(false));
-      // roles are needed for the custom-role assignment select
       loadRoles();
     } else if (adminTab === "invites") {
       loadInvites();
@@ -185,13 +166,13 @@ export default function ServerMenuModal({ onClose }: Props) {
       loadRoles();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminTab, isAdmin]);
+  }, [adminTab, isAdmin, serverUrl, token]);
 
   async function loadInvites() {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     setInvitesLoading(true);
     try {
-      setInvites(await fetchInvites());
+      setInvites(await fetchInvites(serverUrl, token));
     } catch (err) {
       console.error(err);
     } finally {
@@ -200,10 +181,10 @@ export default function ServerMenuModal({ onClose }: Props) {
   }
 
   async function loadRoles() {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     setRolesLoading(true);
     try {
-      setRoles(await fetchRoles());
+      setRoles(await fetchRoles(serverUrl, token));
     } catch (err) {
       console.error(err);
     } finally {
@@ -246,10 +227,9 @@ export default function ServerMenuModal({ onClose }: Props) {
   }
 
   const handleSaveProfile = async () => {
-    if (!activeServer || !session) return;
+    if (!serverUrl || !token) return;
     setProfileSaving(true);
     setProfileMsg(null);
-    configureApi(activeServer.url, session.token);
     try {
       let avatarPayload: string | null | undefined = undefined;
       if (avatarChanged) {
@@ -265,11 +245,11 @@ export default function ServerMenuModal({ onClose }: Props) {
           }
         }
       }
-      const updated = await updateProfile(displayName, avatarPayload);
-      updateSessionUser(activeServer.id, updated);
+      const updated = await updateProfile(serverUrl, token, displayName, avatarPayload);
+      if (activeServer) updateSessionUser(activeServer.id, updated);
       setAvatarChanged(false);
       pendingAvatarFile.current = null;
-      fetchMembers()
+      fetchMembers(serverUrl, token)
         .then((ms) => setMembers(ms))
         .catch(() => {});
       setProfileMsg("saved");
@@ -281,10 +261,9 @@ export default function ServerMenuModal({ onClose }: Props) {
   };
 
   const handleSaveServerSettings = async () => {
-    if (!activeServer || !session) return;
+    if (!activeServer || !serverUrl || !token) return;
     setServerSaving(true);
     setServerMsg(null);
-    configureApi(activeServer.url, session.token);
     try {
       let iconPayload: string | null | undefined = undefined;
       if (serverIconChanged) {
@@ -300,7 +279,7 @@ export default function ServerMenuModal({ onClose }: Props) {
           }
         }
       }
-      const res = await updateServerSettings(serverName, iconPayload);
+      const res = await updateServerSettings(serverUrl, token, serverName, iconPayload);
       updateActiveServerName(res.name);
       setSavedServers(
         savedServers.map((s) =>
@@ -321,10 +300,10 @@ export default function ServerMenuModal({ onClose }: Props) {
 
   // ─── Member management handlers ──────────────────────────────────────────
   const handleToggleRole = async (m: Member) => {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     const newRole = m.role === "admin" ? "member" : "admin";
     try {
-      await setMemberRole(m.id, newRole);
+      await setMemberRole(serverUrl, token, m.id, newRole);
       setMembers(
         members.map((x) => (x.id === m.id ? { ...x, role: newRole } : x)),
       );
@@ -350,9 +329,9 @@ export default function ServerMenuModal({ onClose }: Props) {
       )
     )
       return;
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     try {
-      await kickMember(m.id);
+      await kickMember(serverUrl, token, m.id);
       setMembers(members.filter((x) => x.id !== m.id));
     } catch (err) {
       setMemberMsg((prev) => ({ ...prev, [m.id]: handleApiErr(err, "error") }));
@@ -363,10 +342,10 @@ export default function ServerMenuModal({ onClose }: Props) {
     userId: string,
     roleId: string | null,
   ) => {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     setAssigningRole((prev) => ({ ...prev, [userId]: true }));
     try {
-      await assignCustomRole(userId, roleId);
+      await assignCustomRole(serverUrl, token, userId, roleId);
       setMembers(
         members.map((x) =>
           x.id === userId
@@ -398,10 +377,12 @@ export default function ServerMenuModal({ onClose }: Props) {
   ];
 
   const handleCreateRole = async () => {
-    if (!newRoleName.trim() || !ensureApi()) return;
+    if (!newRoleName.trim() || !serverUrl || !token) return;
     setCreatingRole(true);
     try {
       const role = await createRole(
+        serverUrl,
+        token,
         newRoleName.trim(),
         newRoleColor,
         newRolePerms,
@@ -425,10 +406,10 @@ export default function ServerMenuModal({ onClose }: Props) {
   };
 
   const handleSaveRole = async (id: string) => {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     setSavingRoleId(id);
     try {
-      const updated = await updateRole(id, editName, editColor, editPerms);
+      const updated = await updateRole(serverUrl, token, id, editName, editColor, editPerms);
       setRoles((prev) => prev.map((r) => (r.id === id ? updated : r)));
       // Refresh member list so badges update
       setMembers(
@@ -453,9 +434,9 @@ export default function ServerMenuModal({ onClose }: Props) {
   const handleDeleteRole = async (id: string) => {
     if (!confirm("Delete this role? It will be unassigned from all members."))
       return;
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     try {
-      await deleteRole(id);
+      await deleteRole(serverUrl, token, id);
       setRoles((prev) => prev.filter((r) => r.id !== id));
       setMembers(
         members.map((m) =>
@@ -487,13 +468,13 @@ export default function ServerMenuModal({ onClose }: Props) {
   ];
 
   const handleCreateInvite = async () => {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token || !activeServer) return;
     setCreatingInvite(true);
     try {
       const maxUses = newMaxUses ? parseInt(newMaxUses, 10) : undefined;
       const expiresInHours =
         newExpiry !== "0" ? parseFloat(newExpiry) : undefined;
-      const invite = await createInvite(maxUses, expiresInHours);
+      const invite = await createInvite(serverUrl, token, maxUses, expiresInHours);
       setInvites((prev) => [invite, ...prev]);
       const deepLink = `sloth-voice://join?server=${encodeURIComponent(activeServer!.url)}&code=${invite.code}`;
       const qrDataUrl = await QRCode.toDataURL(deepLink, {
@@ -512,6 +493,7 @@ export default function ServerMenuModal({ onClose }: Props) {
   };
 
   const handleShowQr = async (invite: InviteCode) => {
+    if (!activeServer) return;
     if (activeQr?.code === invite.code) {
       setActiveQr(null);
       return;
@@ -526,9 +508,9 @@ export default function ServerMenuModal({ onClose }: Props) {
   };
 
   const handleRevokeInvite = async (code: string) => {
-    if (!ensureApi()) return;
+    if (!serverUrl || !token) return;
     try {
-      await revokeInvite(code);
+      await revokeInvite(serverUrl, token, code);
       setInvites((prev) => prev.filter((i) => i.code !== code));
       if (activeQr?.code === code) setActiveQr(null);
     } catch (err) {

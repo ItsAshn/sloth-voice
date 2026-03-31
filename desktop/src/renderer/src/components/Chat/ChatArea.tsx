@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useStore } from "../../store/useStore";
-import { fetchMessages, configureApi } from "../../api/server";
+import { fetchMessages } from "@sloth-voice/shared/api";
 import { useSocket } from "../../hooks/useSocket";
 import MessageItem from "./MessageItem";
 import MessageInput from "./MessageInput";
@@ -17,9 +17,8 @@ export default function ChatArea() {
 
   useEffect(() => {
     if (!activeServer || !activeChannel || !session) return;
-    configureApi(activeServer.url, session.token);
     setLoading(true);
-    fetchMessages(activeChannel.id)
+    fetchMessages(activeServer.url, session.token, activeChannel.id)
       .then(setMessages)
       .catch(console.error)
       .finally(() => setLoading(false));

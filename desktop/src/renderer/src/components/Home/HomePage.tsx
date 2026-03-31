@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../../store/useStore";
-import { configureApi, fetchDMChannels } from "@sloth-voice/shared/api";
+import { fetchDMChannels } from "@sloth-voice/shared/api";
 import ChatArea from "../Chat/ChatArea";
 
 interface DMChannel {
@@ -45,8 +45,7 @@ export default function HomePage() {
       if (!session?.token) continue;
 
       try {
-        configureApi(server.url, session.token);
-        const channels = await fetchDMChannels();
+        const channels = await fetchDMChannels(server.url, session.token);
         if (channels.length > 0) {
           results.push({
             serverId: server.id,

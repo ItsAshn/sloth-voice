@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useStore } from "../../store/useStore";
-import { fetchDMMessages, sendDMMessage, configureApi } from "../../api/server";
+import { fetchDMMessages, sendDMMessage } from "@sloth-voice/shared/api";
 import { io, Socket } from "socket.io-client";
 
 interface DMMessage {
@@ -35,9 +35,8 @@ export default function DMChat() {
   useEffect(() => {
     if (!activeServer || !activeDMChannel || !session) return;
 
-    configureApi(activeServer.url, session.token);
     setLoading(true);
-    fetchDMMessages(activeDMChannel.id)
+    fetchDMMessages(activeServer.url, session.token, activeDMChannel.id)
       .then((msgs) => {
         setDMMessages(
           msgs.map((m: any) => ({
@@ -96,7 +95,7 @@ export default function DMChat() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [activeServer?.url, activeDMChannel?.id, session?.token]);
+  }, [activeServer?.url, activeDMChannel?.id, session?.token, session?.user?.id, setDMMessages, addDMMessage]);
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -114,9 +113,8 @@ export default function DMChat() {
     const text = content.trim();
     if (!text || !activeServer || !session || !activeDMChannel) return;
     setSending(true);
-    configureApi(activeServer.url, session.token);
     try {
-      const msg = await sendDMMessage(activeDMChannel.id, text);
+      const msg = await sendDMMessage(activeServer.url, session.token, activeDMChannel.id, text);
       addDMMessage({
         id: msg.id,
         channel_id: msg.channel_id,

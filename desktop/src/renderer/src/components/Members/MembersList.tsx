@@ -4,8 +4,7 @@ import {
   fetchMembers,
   fetchDMChannels,
   getOrCreateDMChannel,
-  configureApi,
-} from "../../api/server";
+} from "@sloth-voice/shared/api";
 
 export default function MembersList() {
   const {
@@ -25,17 +24,15 @@ export default function MembersList() {
 
   useEffect(() => {
     if (!activeServer || !session) return;
-    configureApi(activeServer.url, session.token);
-    fetchMembers().then(setMembers).catch(console.error);
-    fetchDMChannels().then(setDMChannels).catch(console.error);
-  }, [activeServer?.id, session?.token]);
+    fetchMembers(activeServer.url, session.token).then(setMembers).catch(console.error);
+    fetchDMChannels(activeServer.url, session.token).then(setDMChannels).catch(console.error);
+  }, [activeServer?.id, session?.token, setMembers, setDMChannels]);
 
   const handleStartDM = async (userId: string) => {
     if (!activeServer || !session || startingDM) return;
     setStartingDM(userId);
-    configureApi(activeServer.url, session.token);
     try {
-      const channel = await getOrCreateDMChannel(userId);
+      const channel = await getOrCreateDMChannel(activeServer.url, session.token, userId);
       setDMChannels([
         channel,
         ...dmChannels.filter((c) => c.id !== channel.id),

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useStore } from "../../store/useStore";
-import { sendMessage, uploadAttachment, configureApi } from "../../api/server";
+import { sendMessage, uploadAttachment } from "@sloth-voice/shared/api";
 
 interface Props {
   channelId: string;
@@ -61,15 +61,14 @@ export default function MessageInput({ channelId, channelName }: Props) {
     if (!pendingFile || !activeServer || !session) return;
     setUploading(true);
     setUploadProgress(0);
-    configureApi(activeServer.url, session.token);
     try {
-      const result = await uploadAttachment(channelId, pendingFile);
+      const result = await uploadAttachment(activeServer.url, session.token, channelId, pendingFile);
       setSendError(null);
       const attachmentText = `![${result.filename}](${result.url})`;
       if (content.trim()) {
-        await sendMessage(channelId, content + "\n" + attachmentText);
+        await sendMessage(activeServer.url, session.token, channelId, content + "\n" + attachmentText);
       } else {
-        await sendMessage(channelId, attachmentText);
+        await sendMessage(activeServer.url, session.token, channelId, attachmentText);
       }
       setContent("");
       setPendingFile(null);
@@ -93,9 +92,8 @@ export default function MessageInput({ channelId, channelName }: Props) {
     if (!text || !activeServer || !session) return;
     setSending(true);
     setAtQuery(null);
-    configureApi(activeServer.url, session.token);
     try {
-      const msg = await sendMessage(channelId, text);
+      const msg = await sendMessage(activeServer.url, session.token, channelId, text);
       addMessage({
         ...msg,
         display_name: session.user.display_name,

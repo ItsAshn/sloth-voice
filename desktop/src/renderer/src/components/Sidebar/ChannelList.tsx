@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../store/useStore";
-import { fetchChannels, createChannel, configureApi } from "../../api/server";
+import { fetchChannels, createChannel } from "@sloth-voice/shared/api";
 import AuthModal from "../Auth/AuthModal";
 import ServerMenuModal from "../Modals/ServerMenuModal";
 import { useStoreHydrated } from "../../hooks/useStoreHydrated";
@@ -32,17 +32,15 @@ export default function ChannelList() {
 
   useEffect(() => {
     if (!activeServer) return;
-    if (!hydrated) return; // wait for localStorage sessions to load
+    if (!hydrated) return;
     if (!session) {
       setShowAuth(true);
       return;
     }
     setShowAuth(false);
-    configureApi(activeServer.url, session.token);
-    fetchChannels()
+    fetchChannels(activeServer.url, session.token)
       .then(setChannels)
       .catch((err) => {
-        // Token expired or revoked — clear the session and re-authenticate
         if (err?.response?.status === 401) {
           clearSession(activeServer.id);
           setShowAuth(true);
@@ -50,14 +48,14 @@ export default function ChannelList() {
           console.error(err);
         }
       });
-  }, [activeServer?.id, session?.token, hydrated, setChannels]);
+  }, [activeServer?.id, session?.token, hydrated, setChannels, clearSession]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChannelName.trim()) return;
+    if (!newChannelName.trim() || !activeServer || !session) return;
     setCreating(true);
     try {
-      const ch = await createChannel(newChannelName.trim(), newChannelType);
+      const ch = await createChannel(activeServer.url, session.token, newChannelName.trim(), newChannelType);
       setChannels([...channels, ch]);
       setNewChannelName("");
     } finally {
