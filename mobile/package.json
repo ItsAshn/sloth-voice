@@ -1,6 +1,6 @@
 {
   "name": "sloth-voice-mobile",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
